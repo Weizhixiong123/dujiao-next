@@ -384,17 +384,12 @@ func (s *Service) LoginOrRegister(input PurchaseLoginInput) (*UserLoginResult, e
 	if !policy.Enabled {
 		return nil, ErrRegistrationDisabled
 	}
-	verifyEmail := true
-	if s.settingService != nil {
-		verifyEmail, err = s.settingService.GetEmailVerificationEnabled(true)
-		if err != nil {
-			return nil, err
-		}
+	// 购买页注册与购买验证合并为一步：同一次人机验证（login 场景，由 transport 层校验）
+	// 即可完成注册，不再要求邮箱验证码。普通注册页仍按"邮箱验证"开关执行。
+	if !input.AgreementAccepted || (policy.InviteOnly && policy.InviteCode == "") {
+		return &UserLoginResult{RegistrationRequired: true, InviteCodeRequired: policy.InviteOnly}, nil
 	}
-	if !input.AgreementAccepted || (verifyEmail && strings.TrimSpace(input.Code) == "") || (policy.InviteOnly && policy.InviteCode == "") {
-		return &UserLoginResult{RegistrationRequired: true, EmailVerificationRequired: verifyEmail, InviteCodeRequired: policy.InviteOnly}, nil
-	}
-	user, token, expiresAt, err := s.Register(email, input.Password, input.Code, input.InviteCode, input.AgreementAccepted, verifyEmail)
+	user, token, expiresAt, err := s.Register(email, input.Password, "", input.InviteCode, input.AgreementAccepted, false)
 	if errors.Is(err, ErrEmailExists) {
 		// A concurrent registration may win; still require this request's password.
 		return s.LoginStep1(email, input.Password, input.RememberMe)

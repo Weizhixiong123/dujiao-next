@@ -40,19 +40,26 @@ func TestPurchaseLoginRegistersOnceAndRequiresExistingPassword(t *testing.T) {
 
 func TestPurchaseLoginPreservesRegistrationPolicies(t *testing.T) {
 	svc, settings, db := setupTelegramOAuthTestService(t)
-	input := userauthapp.PurchaseLoginInput{Email: "new@example.com", Password: "Secret123", AgreementAccepted: true}
-	// Verification is on by default. A pending response must never create a user or issue a token.
+	input := userauthapp.PurchaseLoginInput{Email: "new@example.com", Password: "Secret123"}
+	// Missing agreement is still pending and must never create a user or issue a token.
 	res, err := svc.LoginOrRegister(input)
-	if err != nil || res == nil || !res.RegistrationRequired || !res.EmailVerificationRequired || res.Token != "" {
-		t.Fatalf("email verification: %+v, %v", res, err)
-	}
-	input.Code = "invalid"
-	if _, err := svc.LoginOrRegister(input); err == nil {
-		t.Fatal("invalid email verification must fail")
+	if err != nil || res == nil || !res.RegistrationRequired || res.EmailVerificationRequired || res.Token != "" {
+		t.Fatalf("agreement pending: %+v, %v", res, err)
 	}
 	if n := countUsers(t, db); n != 0 {
-		t.Fatalf("verification created %d accounts", n)
+		t.Fatalf("pending registration created %d accounts", n)
 	}
+	// Email verification is on by default, but purchase registration skips the email code:
+	// the purchase captcha is the only verification step.
+	input.AgreementAccepted = true
+	res, err = svc.LoginOrRegister(input)
+	if err != nil || res == nil || res.Token == "" || res.RegistrationRequired {
+		t.Fatalf("purchase registration without email code: %+v, %v", res, err)
+	}
+	if n := countUsers(t, db); n != 1 {
+		t.Fatalf("want exactly one account, got %d", n)
+	}
+	input.Email = "closed@example.com"
 	if _, err := settings.Update(constants.SettingKeyRegistrationConfig, map[string]interface{}{
 		constants.SettingFieldRegistrationEnabled:      false,
 		constants.SettingFieldEmailVerificationEnabled: false,
