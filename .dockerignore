@@ -9,6 +9,10 @@ db/
 uploads/
 logs/
 config.yml
+.env
+.env.*
+**/.env
+**/.env.*
 *.db
 *.log
 

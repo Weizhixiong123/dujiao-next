@@ -214,6 +214,48 @@ Or with Docker:
 docker run -d -p 8080:8080 -v $PWD/config.yml:/app/config.yml:ro dujiaonext/dujiao-next:latest
 ```
 
+### Publish your own Docker image (GitHub Actions)
+
+The `Publish Docker image` workflow builds the existing Dockerfile and publishes
+the full application (storefront, admin panel, and API) to GitHub Container Registry
+(GHCR) whenever you push to `main`, after all jobs in the reusable `ci` workflow
+pass. You can also run it from **Actions → Publish
+Docker image → Run workflow** after the workflow exists on your default branch.
+Enable GitHub Actions in your fork if GitHub prompts you to do so.
+
+Images support both `linux/amd64` and `linux/arm64`. The image name uses your
+lowercase repository owner and name; for example:
+
+```text
+ghcr.io/weizhixiong123/dujiao-next:latest
+ghcr.io/weizhixiong123/dujiao-next:sha-<full-commit-sha>
+```
+
+Only builds from `main` update `latest`; manual builds from other branches publish
+the commit tag only. Keep the commit tag used for each deployment so you can select
+an earlier image when rolling back. The workflow authenticates with GitHub's
+automatic `GITHUB_TOKEN`; no Docker Hub account or extra repository secret is needed.
+The application's version is `v0.0.0-fork+sha.<full-commit-sha>`, a valid semantic
+version that identifies your custom build. Fork images use `APP_BUILD_TYPE=source`
+to disable the application's upstream binary self-update; update them by replacing
+the container image instead.
+
+After the first publication, review the package's visibility under your GitHub
+account's **Packages** page. Make it public for unauthenticated pulls, or authenticate
+your server to GHCR with an account/token that has permission to read the private
+package. To download the image on your server:
+
+```bash
+docker pull ghcr.io/weizhixiong123/dujiao-next:latest
+```
+
+Replace the example image name with your own if you use another fork. Publishing
+does not update running containers; recreate your application's container using
+the new image and retain its configuration and data volumes. Pushes to `main` run
+CI through this publication workflow; pushes to `dev` and pull requests still run
+the standalone CI workflow. The official one-click installer still downloads upstream release
+binaries and does not deploy this image.
+
 ## Quick Start (Develop)
 
 Run the backend and the two frontends separately for hot reload:
