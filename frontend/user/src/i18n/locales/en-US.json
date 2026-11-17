@@ -1235,6 +1235,7 @@
     }
   },
   "payment": {
+    "perpayExactAmountTip": "Pay the exact amount displayed without changing it. Your order status updates automatically after payment.",
     "title": "Payment",
     "subtitle": "Choose payment method and proceed",
     "backToOrders": "Back to orders",

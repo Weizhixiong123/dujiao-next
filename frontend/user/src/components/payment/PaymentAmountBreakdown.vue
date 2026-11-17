@@ -2,6 +2,7 @@
   <div class="bg-secondary border rounded-2xl p-4">
     <div class="text-xs uppercase tracking-wider text-muted-foreground">{{ t('payment.payableAmountLabel') }}</div>
     <div class="mt-1 text-2xl font-bold text-foreground">{{ payableAmountDisplay }}</div>
+    <p v-if="paymentResult.perpay_inline" class="mt-2 text-sm text-warning">{{ t('payment.perpayExactAmountTip') }}</p>
     <div class="mt-4 space-y-2 text-xs">
       <div class="flex items-center justify-between gap-4">
         <span class="text-muted-foreground">{{ t('orderDetail.amountTotal') }}</span>

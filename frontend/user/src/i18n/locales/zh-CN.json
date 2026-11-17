@@ -1187,6 +1187,7 @@
     }
   },
   "payment": {
+    "perpayExactAmountTip": "请按显示的实际应付金额付款，不要修改金额。付款后会自动更新订单状态。",
     "title": "发起支付",
     "subtitle": "选择支付方式并完成支付",
     "backToOrders": "返回订单",

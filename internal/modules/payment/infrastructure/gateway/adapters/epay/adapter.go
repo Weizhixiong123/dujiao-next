@@ -5,12 +5,15 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	gatewaycommon "github.com/dujiao-next/internal/modules/payment/infrastructure/gateway/common"
 
@@ -63,8 +66,14 @@ func (a *epayAdapter) ValidateConfig(raw jsonmap.JSON, channelType string) error
 	if channelType != "" && !epay.IsSupportedChannelType(channelType) {
 		return fmt.Errorf("%w: epay channel_type %s", paymentcontract.ErrGatewayUnsupportedChannel, channelType)
 	}
-	_, err := a.parseConfig(raw)
-	return err
+	cfg, err := a.parseConfig(raw)
+	if err != nil {
+		return err
+	}
+	if cfg.PerpayInline && channelType != "" && channelType != constants.PaymentChannelTypeAlipay {
+		return paymentcontract.ErrGatewayConfigInvalid
+	}
+	return nil
 }
 
 // CreatePayment 创建支付。双 mode dispatch：
@@ -129,6 +138,14 @@ func (a *epayAdapter) CreatePayment(ctx context.Context, raw jsonmap.JSON, input
 	// 从 input.Extra 取 interaction_mode，按模式 dispatch
 	mode, _ := input.Extra["interaction_mode"].(string)
 	mode = strings.ToLower(strings.TrimSpace(mode))
+	// The inline amount is exposed by storefront order payment responses. Wallet
+	// recharge has its own presentation contract and keeps its existing flow.
+	inlineCheckout := cfg.PerpayInline && input.ReturnURLQuery["biz_type"] != "recharge"
+	if inlineCheckout {
+		if mode != constants.PaymentInteractionQR || input.ChannelType != constants.PaymentChannelTypeAlipay || payCurrency != "CNY" {
+			return nil, fmt.Errorf("%w: PerPay inline requires alipay QR mode", paymentcontract.ErrGatewayConfigInvalid)
+		}
+	}
 
 	var result *epay.CreateResult
 	switch mode {
@@ -148,6 +165,19 @@ func (a *epayAdapter) CreatePayment(ctx context.Context, raw jsonmap.JSON, input
 	if result.Raw != nil {
 		payload = jsonmap.JSON(result.Raw)
 	}
+	var checkoutExpiry *time.Time
+	if inlineCheckout {
+		checkout, fetchErr := fetchPerpayCheckout(ctx, cfg.GatewayURL, result.PayURL, input.OrderNo, payAmount, payCurrency)
+		if fetchErr != nil {
+			return nil, fetchErr
+		}
+		result.QRCode = checkout.Data.Instructions.Code
+		result.PayURL = ""
+		// Store only display facts, never the public checkout token or raw response.
+		payload = jsonmap.JSON{"perpay_inline": true, "perpay_collection_amount": decimal.NewFromInt(checkout.Data.Instructions.PayableCents).Shift(-2).StringFixed(2)}
+		expires, _ := time.Parse(time.RFC3339Nano, checkout.Data.Checkout.ExpiresAt)
+		checkoutExpiry = &expires
+	}
 	if converted {
 		payload["exchange_rate"] = strings.TrimSpace(cfg.ExchangeRate)
 		payload["original_amount"] = originalAmount
@@ -165,6 +195,7 @@ func (a *epayAdapter) CreatePayment(ctx context.Context, raw jsonmap.JSON, input
 	}
 
 	return &paymentcontract.GatewayCreateResult{
+		ExpiresAt:    checkoutExpiry,
 		ProviderRef:  result.TradeNo,
 		RedirectURL:  redirectURL,
 		QRCodeURL:    result.QRCode,
@@ -172,6 +203,94 @@ func (a *epayAdapter) CreatePayment(ctx context.Context, raw jsonmap.JSON, input
 		AmountSent:   payAmount,
 		CurrencySent: payCurrency,
 	}, nil
+}
+
+type perpayCheckout struct {
+	Data struct {
+		MerchantOrderNo string `json:"merchant_order_no"`
+		RequestedCents  int64  `json:"requested_amount_cents"`
+		Currency        string `json:"currency"`
+		Instructions    *struct {
+			PayableCents int64  `json:"payable_amount_cents"`
+			Currency     string `json:"currency"`
+			Code         string `json:"collection_code_payload"`
+		} `json:"payment_instructions"`
+		Checkout struct {
+			Status    string `json:"status"`
+			ExpiresAt string `json:"expires_at"`
+		} `json:"checkout"`
+		Payment struct {
+			Status string `json:"status"`
+		} `json:"payment"`
+	} `json:"data"`
+}
+
+func fetchPerpayCheckout(ctx context.Context, gateway, checkoutURL, orderNo, amount, currency string) (*perpayCheckout, error) {
+	invalid := paymentcontract.ErrGatewayResponseInvalid
+	base, err := url.Parse(gateway)
+	if err != nil {
+		return nil, invalid
+	}
+	checkout, err := url.Parse(checkoutURL)
+	if err != nil || checkout.User != nil || checkout.Scheme != base.Scheme || !strings.EqualFold(checkout.Host, base.Host) || checkout.RawQuery != "" || checkout.Fragment != "" || (checkout.Scheme != "https" && checkout.Scheme != "http") {
+		return nil, invalid
+	}
+	token := strings.TrimPrefix(checkout.Path, "/checkout/")
+	if !strings.HasPrefix(checkout.Path, "/checkout/") || len(token) < 16 || len(token) > 512 {
+		return nil, invalid
+	}
+	for _, char := range token {
+		if !(char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' || char >= '0' && char <= '9' || char == '_' || char == '-') {
+			return nil, invalid
+		}
+	}
+	checkout.Path = "/api/public/v1/checkouts/" + token
+	checkout.RawPath = ""
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, checkout.String(), nil)
+	if err != nil {
+		return nil, invalid
+	}
+	req.Header.Set("Accept", "application/json")
+	client := &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := client.Do(req)
+	// Avoid leaking the capability URL through wrapped network errors or logs.
+	if err != nil {
+		return nil, paymentcontract.ErrGatewayRequestFailed
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, invalid
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 65537))
+	if err != nil || len(body) > 65536 {
+		return nil, invalid
+	}
+	var result perpayCheckout
+	if json.Unmarshal(body, &result) != nil {
+		return nil, invalid
+	}
+	d := result.Data
+	expected, err := decimal.NewFromString(amount)
+	if err != nil || currency != "CNY" || !expected.IsPositive() || !expected.Equal(expected.Round(2)) || !decimal.NewFromInt(d.RequestedCents).Equal(expected.Shift(2)) {
+		return nil, invalid
+	}
+	if d.MerchantOrderNo != orderNo || d.Currency != "CNY" || d.Instructions == nil || d.Instructions.Currency != "CNY" || d.Instructions.PayableCents < d.RequestedCents || d.Instructions.PayableCents > 9007199254740991 || d.Checkout.Status != "OPEN" || d.Payment.Status != "UNPAID" {
+		return nil, invalid
+	}
+	expires, err := time.Parse(time.RFC3339Nano, d.Checkout.ExpiresAt)
+	if err != nil || !expires.After(time.Now()) {
+		return nil, invalid
+	}
+	code, err := url.Parse(d.Instructions.Code)
+	if err != nil || (!strings.EqualFold(code.Scheme, "https") && !strings.EqualFold(code.Scheme, "http")) || !strings.EqualFold(code.Host, "qr.alipay.com") || code.User != nil || code.Path == "" || code.Path == "/" || code.RawPath != "" || code.Fragment != "" || len(d.Instructions.Code) > 2331 || strings.ContainsAny(d.Instructions.Code, "\r\n\t \\") {
+		return nil, invalid
+	}
+	for _, char := range strings.TrimPrefix(code.Path, "/") {
+		if !(char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' || char >= '0' && char <= '9' || char == '_' || char == '-') {
+			return nil, invalid
+		}
+	}
+	return &result, nil
 }
 
 // appendEpayReturnQuery keeps storefront return context in one URL-safe value.

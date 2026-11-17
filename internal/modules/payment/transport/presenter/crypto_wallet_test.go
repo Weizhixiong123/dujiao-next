@@ -1,11 +1,38 @@
 package presenter
 
 import (
+	"encoding/json"
+	paymentdomain "github.com/dujiao-next/internal/modules/payment/domain"
+	"github.com/dujiao-next/internal/shared/money"
+	"github.com/shopspring/decimal"
+	"strings"
 	"testing"
 
 	"github.com/dujiao-next/internal/constants"
 	"github.com/dujiao-next/internal/shared/jsonmap"
 )
+
+func TestPerpayDisplayAmountDoesNotReplaceOrderSettlementAmount(t *testing.T) {
+	payment := &paymentdomain.Payment{ProviderType: "epay", InteractionMode: "qr", Currency: "CNY", Amount: money.FromDecimal(decimal.RequireFromString("0.10")), ProviderPayload: jsonmap.JSON{"perpay_inline": true, "perpay_collection_amount": "0.13", "token": "must-not-leak"}}
+	created := NewCreatePaymentResp(&CreatePaymentResultView{Payment: payment})
+	latest := NewLatestPaymentResp(payment, "ORDER123")
+	if !created.PerpayInline || !latest.PerpayInline || created.CollectionAmount != "0.13" || latest.CollectionAmount != "0.13" {
+		t.Fatal("missing safe collection amount")
+	}
+	if created.PayableAmount.StringFixed(2) != "0.10" || latest.PayableAmount.StringFixed(2) != "0.10" || payment.Amount.StringFixed(2) != "0.10" {
+		t.Fatal("settlement amount overwritten")
+	}
+	for _, response := range []interface{}{created, latest} {
+		body, _ := json.Marshal(response)
+		if strings.Contains(string(body), "must-not-leak") {
+			t.Fatal("private payload exposed")
+		}
+	}
+	payment.ProviderType = "official"
+	if enabled, amount := perpayDisplayFacts(payment); enabled || amount != "" {
+		t.Fatal("PerPay display applied to other provider")
+	}
+}
 
 func TestExtractUSDTWalletInfo(t *testing.T) {
 	tests := []struct {

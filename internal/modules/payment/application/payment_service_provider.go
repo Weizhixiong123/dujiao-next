@@ -184,6 +184,9 @@ func (s *PaymentService) applyProviderPayment(input CreatePaymentInput, order *o
 	}
 
 	// 把 result 写回 payment 字段
+	if result.ExpiresAt != nil && (payment.ExpiredAt == nil || result.ExpiresAt.Before(*payment.ExpiredAt)) {
+		payment.ExpiredAt = result.ExpiresAt
+	}
 	payment.PayURL = strings.TrimSpace(result.RedirectURL)
 	payment.QRCode = strings.TrimSpace(result.QRCodeURL)
 	if result.ProviderRef != "" {

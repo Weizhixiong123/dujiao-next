@@ -25,6 +25,7 @@ import QRCode from 'qrcode'
 import { type PageAlert } from '../utils/alerts'
 import { loadGuestOrderAuth, saveGuestOrderAuth } from '../utils/guestOrderAuth'
 import { decodeEpayReturnState } from '../utils/epayReturnState'
+import { perpayCollectionAmount } from '../utils/perpayInline'
 
 /**
  * 支付页共享逻辑（classic + vault 双模板共用）。
@@ -200,7 +201,7 @@ export function usePayment() {
 
   const paymentResultTitle = computed(() => t(resolvePaymentResultTitleKey(interactionMode.value)))
   const paymentGuideTitle = computed(() => paymentPresentationMode.value === 'redirect' ? t('payment.redirectTitle') : t('payment.qrTitle'))
-  const paymentGuideTip = computed(() => paymentPresentationMode.value === 'redirect' ? t('payment.redirectTip') : t('payment.qrTip'))
+  const paymentGuideTip = computed(() => perpayCollectionAmount(paymentResult.value) ? t('payment.perpayExactAmountTip') : paymentPresentationMode.value === 'redirect' ? t('payment.redirectTip') : t('payment.qrTip'))
 
   const showPayLink = computed(() => {
     return paymentPresentationMode.value === 'redirect' || Boolean(payLink.value)
@@ -281,7 +282,7 @@ export function usePayment() {
   })
   const qrDisplayContent = computed(() => qrCodeContent.value || qrFallbackContent.value)
   const qrUsingPayLinkFallback = computed(() => Boolean(!qrCodeContent.value && qrFallbackContent.value))
-  const showQRCode = computed(() => paymentPresentationMode.value === 'qr' && Boolean(qrDisplayContent.value))
+  const showQRCode = computed(() => paymentPresentationMode.value === 'qr' && Boolean(qrDisplayContent.value) && !(paymentResult.value?.perpay_inline && countdownExpired.value))
 
   const qrImageUrl = ref('')
   const qrRenderVersion = ref(0)
@@ -410,6 +411,8 @@ export function usePayment() {
     return formatMoney(String(paymentResult.value?.fee_amount || '0'), order.value?.currency)
   })
   const payableAmountDisplay = computed(() => {
+    const collectionAmount = perpayCollectionAmount(paymentResult.value)
+    if (collectionAmount) return formatMoney(collectionAmount, 'CNY')
     if (paymentResult.value?.payable_amount !== undefined && paymentResult.value?.payable_amount !== null && paymentResult.value?.payable_amount !== '') {
       return formatMoney(String(paymentResult.value.payable_amount), payableAmountCurrency.value)
     }

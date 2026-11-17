@@ -1235,6 +1235,7 @@
     }
   },
   "payment": {
+    "perpayExactAmountTip": "請按顯示的實際應付金額付款，不要修改金額。付款後會自動更新訂單狀態。",
     "title": "發起支付",
     "subtitle": "選擇支付方式並完成支付",
     "backToOrders": "返回訂單",

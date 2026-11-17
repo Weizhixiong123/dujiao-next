@@ -66,6 +66,7 @@ onMounted(async () => {
 })
 
 const epayConfig = reactive({
+  perpay_inline: false,
   epay_version: 'v2',
   gateway_url: '',
   merchant_id: '',
@@ -339,6 +340,7 @@ const pickDefaultInteractionMode = () => {
 
 const resetEpayConfig = () => {
   epayConfig.epay_version = 'v2'
+  epayConfig.perpay_inline = false
   epayConfig.gateway_url = ''
   epayConfig.merchant_id = ''
   epayConfig.merchant_key = ''
@@ -479,6 +481,7 @@ const resetAllConfigs = () => {
 const applyEpayConfig = (raw: Record<string, unknown>) => {
   const version = String(raw.epay_version || '').toLowerCase()
   epayConfig.epay_version = version === 'v1' ? 'v1' : 'v2'
+  epayConfig.perpay_inline = raw.perpay_inline === true
   epayConfig.gateway_url = String(raw.gateway_url || '')
   epayConfig.merchant_id = String(raw.merchant_id || '')
   epayConfig.merchant_key = String(raw.merchant_key || '')
@@ -610,8 +613,15 @@ const applyDujiaoPayConfig = (raw: Record<string, unknown>) => {
 
 // --- Build functions ---
 
+watch(() => [form.channel_type, form.interaction_mode], () => {
+  if (!applyingChannelData.value && (form.channel_type !== 'alipay' || form.interaction_mode !== 'qr')) {
+    epayConfig.perpay_inline = false
+  }
+})
+
 const buildEpayConfig = () => {
   const config: Record<string, unknown> = {}
+  config.perpay_inline = epayConfig.perpay_inline
   const setIfNotEmpty = (key: string, value: string) => {
     const trimmed = String(value || '').trim()
     if (trimmed !== '') {
@@ -1413,6 +1423,13 @@ const closeModal = () => {
               <label class="block text-xs font-medium text-muted-foreground mb-1.5">{{ t('admin.paymentChannels.modal.exchangeRate') }}</label>
               <Input v-model="epayConfig.exchange_rate" :placeholder="t('admin.paymentChannels.modal.exchangeRatePlaceholder')" />
             </div>
+          </div>
+          <div class="mt-3 flex flex-col gap-2">
+            <div class="flex items-center gap-2">
+              <Switch id="perpay-inline" v-model="epayConfig.perpay_inline" :disabled="form.channel_type !== 'alipay' || form.interaction_mode !== 'qr'" />
+              <Label for="perpay-inline">{{ t('admin.paymentChannels.modal.perpayInline') }}</Label>
+            </div>
+            <p class="text-xs text-muted-foreground">{{ t('admin.paymentChannels.modal.perpayInlineHint') }}</p>
           </div>
           <div class="mt-3 text-xs text-muted-foreground">{{ t('admin.paymentChannels.modal.epayHint') }}</div>
         </div>

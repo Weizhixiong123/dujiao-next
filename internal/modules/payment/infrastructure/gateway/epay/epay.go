@@ -57,6 +57,7 @@ var (
 
 // Config 易支付配置
 type Config struct {
+	PerpayInline bool `json:"perpay_inline"`
 	common.ExchangeRateConfig
 	GatewayURL  string `json:"gateway_url"`         // 网关地址
 	EpayVersion string `json:"epay_version"`        // 版本（v1/v2）

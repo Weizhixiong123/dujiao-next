@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -111,6 +112,7 @@ func TestBuildOrderSubject(t *testing.T) {
 }
 
 type emptyProviderRefProvider struct {
+	expiresAt          *time.Time
 	onCreate           func(paymentcontract.GatewayCreateInput)
 	displayChannelType string
 	createErr          error
@@ -143,9 +145,48 @@ func (p emptyProviderRefProvider) CreatePayment(_ context.Context, _ jsonmap.JSO
 		return nil, p.createErr
 	}
 	return &paymentcontract.GatewayCreateResult{
+		ExpiresAt:          p.expiresAt,
 		QRCodeURL:          "weixin://wxpay/bizpayurl?pr=test",
 		DisplayChannelType: p.displayChannelType,
 	}, nil
+}
+
+func TestProviderExpiryCanShortenButNeverExtendPaymentDeadline(t *testing.T) {
+	for _, minutes := range []int{3, 20} {
+		t.Run(fmt.Sprint(minutes), func(t *testing.T) {
+			svc, db := setupPaymentServiceWalletTest(t)
+			now := time.Now().UTC().Truncate(time.Second)
+			originalExpiry := now.Add(10 * time.Minute)
+			gatewayExpiry := now.Add(time.Duration(minutes) * time.Minute)
+			order := &orderdomain.Order{OrderNo: "EXPIRY-TEST", UserID: 1, Status: constants.OrderStatusPendingPayment, Currency: "CNY", TotalAmount: money.FromDecimal(decimal.NewFromInt(1))}
+			if err := db.Create(order).Error; err != nil {
+				t.Fatal(err)
+			}
+			channel := &paymentdomain.PaymentChannel{ProviderType: constants.PaymentProviderOfficial, ChannelType: constants.PaymentChannelTypeWechat, InteractionMode: constants.PaymentInteractionQR}
+			if err := db.Create(channel).Error; err != nil {
+				t.Fatal(err)
+			}
+			payment := &paymentdomain.Payment{OrderID: order.ID, ChannelID: channel.ID, ProviderType: channel.ProviderType, ChannelType: channel.ChannelType, InteractionMode: channel.InteractionMode, Currency: "CNY", Amount: money.FromDecimal(decimal.NewFromInt(1)), Status: constants.PaymentStatusInitiated, ExpiredAt: &originalExpiry}
+			if err := db.Create(payment).Error; err != nil {
+				t.Fatal(err)
+			}
+			registerTestGateway(t, svc, channel.ProviderType, channel.ChannelType, emptyProviderRefProvider{expiresAt: &gatewayExpiry})
+			if err := svc.applyProviderPayment(CreatePaymentInput{Context: context.Background()}, order, channel, payment); err != nil {
+				t.Fatal(err)
+			}
+			var stored paymentdomain.Payment
+			if err := db.First(&stored, payment.ID).Error; err != nil {
+				t.Fatal(err)
+			}
+			want := originalExpiry
+			if gatewayExpiry.Before(want) {
+				want = gatewayExpiry
+			}
+			if stored.ExpiredAt == nil || !stored.ExpiredAt.Equal(want) {
+				t.Fatalf("expiry=%v, want %v", stored.ExpiredAt, want)
+			}
+		})
+	}
 }
 
 type fakeGatewaySecurityTester struct {

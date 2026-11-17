@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	paymentcontract "github.com/dujiao-next/internal/modules/payment/contract"
 
@@ -33,6 +35,148 @@ func TestEpayAdapter_Type(t *testing.T) {
 	want := constants.PaymentProviderEpay + ":"
 	if got := a.Type(); got != want {
 		t.Fatalf("Type() = %q, want %q", got, want)
+	}
+}
+
+func perpayFixture() map[string]interface{} {
+	return map[string]interface{}{"data": map[string]interface{}{
+		"merchant_order_no": "DJP123", "requested_amount_cents": 10, "currency": "CNY",
+		"payment_instructions": map[string]interface{}{"payable_amount_cents": 13, "currency": "CNY", "collection_code_payload": "https://qr.alipay.com/TEST_CODE"},
+		"checkout":             map[string]interface{}{"status": "OPEN", "expires_at": time.Now().Add(5 * time.Minute).UTC().Format(time.RFC3339)},
+		"payment":              map[string]interface{}{"status": "UNPAID"},
+	}}
+}
+
+func TestPerpayInlineCreatesRealCodeWithoutChangingSettlementAmount(t *testing.T) {
+	for _, version := range []string{"v1", "v2"} {
+		t.Run(version, func(t *testing.T) {
+			var server *httptest.Server
+			token := "pct1_test_checkout_capability"
+			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if r.Method == http.MethodGet {
+					if r.URL.Path != "/api/public/v1/checkouts/"+token {
+						t.Error("wrong checkout endpoint")
+					}
+					_ = json.NewEncoder(w).Encode(perpayFixture())
+					return
+				}
+				if version == "v1" {
+					_ = json.NewEncoder(w).Encode(map[string]interface{}{"code": 1, "trade_no": "TRADE123", "payurl": server.URL + "/checkout/" + token})
+				} else {
+					_ = json.NewEncoder(w).Encode(map[string]interface{}{"code": 0, "trade_no": "TRADE123", "pay_type": "jump", "pay_info": server.URL + "/checkout/" + token})
+				}
+			}))
+			defer server.Close()
+			privateKey, publicKey := generateAdapterRSAKeyPair(t)
+			raw := jsonmap.JSON{"perpay_inline": true, "gateway_url": server.URL, "epay_version": version, "merchant_id": "1002", "merchant_key": "test-key", "private_key": privateKey, "platform_public_key": publicKey, "notify_url": "https://shop.example/api/v1/payments/callback", "return_url": "https://shop.example/pay"}
+			result, err := NewEpayAdapter().CreatePayment(context.Background(), raw, paymentcontract.GatewayCreateInput{OrderNo: "DJP123", Amount: money.FromDecimal(decimal.RequireFromString("0.10")), Currency: "CNY", ChannelType: "alipay", ClientIP: "127.0.0.1", Extra: jsonmap.JSON{"interaction_mode": "qr"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.RedirectURL != "" || result.QRCodeURL != "https://qr.alipay.com/TEST_CODE" {
+				t.Fatal("expected actual QR payload without redirect")
+			}
+			if result.AmountSent != "0.1" || result.CurrencySent != "CNY" || result.Payload["perpay_collection_amount"] != "0.13" {
+				t.Fatal("collection and settlement amounts mixed")
+			}
+			if result.ExpiresAt == nil || !result.ExpiresAt.After(time.Now()) {
+				t.Fatal("missing checkout expiry")
+			}
+			encoded, _ := json.Marshal(result)
+			if strings.Contains(string(encoded), token) || strings.Contains(string(encoded), "private_key") {
+				t.Fatal("checkout capability or key leaked")
+			}
+		})
+	}
+}
+
+func TestPerpayCheckoutRejectsUnsafeOrMismatchedResponses(t *testing.T) {
+	cases := []struct {
+		name   string
+		change func(map[string]interface{})
+	}{
+		{"wrong order", func(d map[string]interface{}) { d["merchant_order_no"] = "OTHER" }},
+		{"wrong original amount", func(d map[string]interface{}) { d["requested_amount_cents"] = 11 }},
+		{"wrong currency", func(d map[string]interface{}) { d["currency"] = "USD" }},
+		{"no instructions", func(d map[string]interface{}) { d["payment_instructions"] = nil }},
+		{"already paid", func(d map[string]interface{}) { d["payment"].(map[string]interface{})["status"] = "CONFIRMED" }},
+		{"closed", func(d map[string]interface{}) { d["checkout"].(map[string]interface{})["status"] = "CLOSED" }},
+		{"expired", func(d map[string]interface{}) {
+			d["checkout"].(map[string]interface{})["expires_at"] = time.Now().Add(-time.Minute).Format(time.RFC3339)
+		}},
+		{"lower payable amount", func(d map[string]interface{}) {
+			d["payment_instructions"].(map[string]interface{})["payable_amount_cents"] = 9
+		}},
+		{"arbitrary QR link", func(d map[string]interface{}) {
+			d["payment_instructions"].(map[string]interface{})["collection_code_payload"] = "https://evil.example/pay"
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := perpayFixture()
+			tc.change(fixture["data"].(map[string]interface{}))
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _ = json.NewEncoder(w).Encode(fixture) }))
+			defer server.Close()
+			_, err := fetchPerpayCheckout(context.Background(), server.URL, server.URL+"/checkout/pct1_test_capability", "DJP123", "0.1", "CNY")
+			if !errors.Is(err, paymentcontract.ErrGatewayResponseInvalid) {
+				t.Fatalf("want invalid response, got %v", err)
+			}
+		})
+	}
+}
+
+func TestPerpayCheckoutRefusesOtherOriginsAndRedirects(t *testing.T) {
+	calls := 0
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls++; _ = json.NewEncoder(w).Encode(perpayFixture()) }))
+	defer target.Close()
+	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, target.URL, http.StatusFound) }))
+	defer gateway.Close()
+	for _, endpoint := range []string{target.URL + "/checkout/pct1_test_capability", gateway.URL + "/checkout/pct1_test_capability", gateway.URL + "/checkout/pct1_test_capability?redirect=evil", gateway.URL + "/checkout/pct1_test_capability/extra"} {
+		if _, err := fetchPerpayCheckout(context.Background(), gateway.URL, endpoint, "DJP123", "0.1", "CNY"); err == nil {
+			t.Fatal("unsafe checkout accepted")
+		}
+	}
+	if calls != 0 {
+		t.Fatal("followed an untrusted origin or redirect")
+	}
+}
+
+func TestPerpayInlineKeepsOrdinaryEpayAndWalletRechargeUnchanged(t *testing.T) {
+	for _, item := range []struct {
+		name    string
+		enabled bool
+		bizType string
+	}{{"ordinary Epay", false, "order"}, {"wallet recharge", true, "recharge"}} {
+		t.Run(item.name, func(t *testing.T) {
+			gets := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodGet {
+					gets++
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"code":1,"trade_no":"TEST","payurl":"https://gateway.example/checkout"}`))
+			}))
+			defer server.Close()
+			raw := jsonmap.JSON{"perpay_inline": item.enabled, "gateway_url": server.URL, "epay_version": "v1", "merchant_id": "1002", "merchant_key": "test", "notify_url": "https://shop.example/callback", "return_url": "https://shop.example/pay"}
+			result, err := NewEpayAdapter().CreatePayment(context.Background(), raw, paymentcontract.GatewayCreateInput{OrderNo: "DJP123", Amount: money.FromDecimal(decimal.RequireFromString("0.10")), Currency: "CNY", ChannelType: "alipay", ClientIP: "127.0.0.1", ReturnURLQuery: map[string]string{"biz_type": item.bizType}, Extra: jsonmap.JSON{"interaction_mode": "qr"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if gets != 0 || result.RedirectURL != "https://gateway.example/checkout" || result.QRCodeURL != "" || result.Payload["perpay_inline"] != nil {
+				t.Fatal("legacy checkout behavior changed")
+			}
+		})
+	}
+}
+
+func TestPerpayInlineRejectsUnsupportedConfigurationBeforeCreatingAnOrder(t *testing.T) {
+	raw := jsonmap.JSON{"perpay_inline": true, "gateway_url": "https://unused.example", "epay_version": "v1", "merchant_id": "1002", "merchant_key": "test", "notify_url": "https://shop.example/callback", "return_url": "https://shop.example/pay"}
+	for _, item := range []struct{ channel, currency, mode string }{{"wxpay", "CNY", "qr"}, {"alipay", "USD", "qr"}, {"alipay", "CNY", "redirect"}} {
+		_, err := NewEpayAdapter().CreatePayment(context.Background(), raw, paymentcontract.GatewayCreateInput{OrderNo: "DJP123", Amount: money.FromDecimal(decimal.RequireFromString("0.10")), Currency: item.currency, ChannelType: item.channel, Extra: jsonmap.JSON{"interaction_mode": item.mode}})
+		if !errors.Is(err, paymentcontract.ErrGatewayConfigInvalid) {
+			t.Fatalf("want config error, got %v", err)
+		}
 	}
 }
 
