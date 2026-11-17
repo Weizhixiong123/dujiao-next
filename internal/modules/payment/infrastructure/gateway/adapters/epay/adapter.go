@@ -3,6 +3,7 @@ package epayadapter
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -92,7 +93,7 @@ func (a *epayAdapter) CreatePayment(ctx context.Context, raw jsonmap.JSON, input
 		returnURL = strings.TrimSpace(cfg.ReturnURL)
 	}
 	// P1.2c Task 3: fallback 完成后 append tracking marker。
-	returnURL = gatewaycommon.AppendQueryParams(returnURL, input.ReturnURLQuery)
+	returnURL = appendEpayReturnQuery(returnURL, input.ReturnURLQuery)
 
 	// P1.2c: wrapper 内做 currency conversion + audit 字段写入，在 mode dispatch 之前完成，
 	// 使两条 path（BuildRedirectURL / CreatePayment）都使用转换后金额。
@@ -171,6 +172,24 @@ func (a *epayAdapter) CreatePayment(ctx context.Context, raw jsonmap.JSON, input
 		AmountSent:   payAmount,
 		CurrencySent: payCurrency,
 	}, nil
+}
+
+// appendEpayReturnQuery keeps storefront return context in one URL-safe value.
+// Some gateways reject '&' inside signed values, including return_url. The SPA
+// decodes this context for navigation only; payment confirmation still requires
+// the gateway's verified callback.
+func appendEpayReturnQuery(rawURL string, params map[string]string) string {
+	if len(params) == 0 {
+		return rawURL
+	}
+	result := gatewaycommon.AppendQueryParams(rawURL, params)
+	parsed, err := url.Parse(result)
+	if err != nil || parsed.RawQuery == "" {
+		return result
+	}
+	state := base64.RawURLEncoding.EncodeToString([]byte(parsed.RawQuery))
+	parsed.RawQuery = url.Values{"epay_return_state": {state}}.Encode()
+	return parsed.String()
 }
 
 func epaySubmitPOST(payload jsonmap.JSON) bool {

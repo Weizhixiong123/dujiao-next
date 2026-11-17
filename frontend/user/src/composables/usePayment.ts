@@ -24,6 +24,7 @@ import {
 import QRCode from 'qrcode'
 import { type PageAlert } from '../utils/alerts'
 import { loadGuestOrderAuth, saveGuestOrderAuth } from '../utils/guestOrderAuth'
+import { decodeEpayReturnState } from '../utils/epayReturnState'
 
 /**
  * 支付页共享逻辑（classic + vault 双模板共用）。
@@ -96,7 +97,7 @@ export function usePayment() {
       const value = routeQueryValueToString(rawValue)
       if (value !== '') return value
     }
-    return ''
+    return decodeEpayReturnState(query.epay_return_state)[normalizedKey] || ''
   }
 
   const readRouteQueryFlag = (key: string): boolean => {

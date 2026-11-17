@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
 	"errors"
@@ -32,6 +33,94 @@ func TestEpayAdapter_Type(t *testing.T) {
 	want := constants.PaymentProviderEpay + ":"
 	if got := a.Type(); got != want {
 		t.Fatalf("Type() = %q, want %q", got, want)
+	}
+}
+
+func TestEpayReturnContextSurvivesStrictGatewayAndSignatureVerification(t *testing.T) {
+	privateKey, publicKey := generateAdapterRSAKeyPair(t)
+	for _, version := range []string{"v1", "v2"} {
+		for _, mode := range []string{"qr", "redirect"} {
+			t.Run(version+"/"+mode, func(t *testing.T) {
+				var submitted url.Values
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if err := r.ParseForm(); err != nil {
+						t.Error(err)
+					}
+					submitted = r.PostForm
+					w.Header().Set("Content-Type", "application/json")
+					if version == "v1" {
+						_, _ = w.Write([]byte(`{"code":1,"trade_no":"TEST","payurl":"https://gateway.example/pay"}`))
+					} else {
+						_, _ = w.Write([]byte(`{"code":0,"trade_no":"TEST","pay_type":"jump","pay_info":"https://gateway.example/pay"}`))
+					}
+				}))
+				defer server.Close()
+				raw := jsonmap.JSON{
+					"gateway_url": server.URL, "epay_version": version, "merchant_id": "1002",
+					"merchant_key": "test-key", "private_key": privateKey, "platform_public_key": publicKey,
+					"notify_url": "https://shop.example/api/v1/payments/callback",
+					"return_url": "https://shop.example/pay?source=checkout",
+				}
+				contextQuery := map[string]string{"biz_type": "order", "order_no": "DJP123", "guest": "1", "epay_return": "1"}
+				result, err := NewEpayAdapter().CreatePayment(context.Background(), raw, paymentcontract.GatewayCreateInput{
+					PaymentID: 42, OrderNo: "DJP123", Subject: "test product", Currency: "CNY",
+					Amount: money.FromDecimal(decimal.RequireFromString("0.10")), ChannelType: "alipay", ClientIP: "127.0.0.1",
+					ReturnURLQuery: contextQuery, Extra: jsonmap.JSON{"interaction_mode": mode},
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if mode == "redirect" {
+					submitted = url.Values{}
+					params := result.Payload["params"].(map[string]interface{})
+					for k, v := range params {
+						submitted.Set(k, v.(string))
+					}
+				}
+				for k, values := range submitted {
+					if len(values) != 1 || strings.Contains(values[0], "&") {
+						t.Fatalf("strict gateway rejects %s", k)
+					}
+				}
+				cfg, err := epay.ParseConfig(raw)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := epay.VerifyCallback(cfg, submitted); err != nil {
+					t.Fatalf("signed request: %v", err)
+				}
+				if submitted.Get("money") != "0.1" || submitted.Get("notify_url") != raw["notify_url"] {
+					t.Fatal("amount or notification endpoint changed")
+				}
+				returnURL, err := url.Parse(submitted.Get("return_url"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if returnURL.Scheme != "https" || returnURL.Host != "shop.example" || returnURL.Path != "/pay" || len(returnURL.Query()) != 1 {
+					t.Fatalf("return URL changed: %s", returnURL)
+				}
+				decoded, err := base64.RawURLEncoding.DecodeString(returnURL.Query().Get("epay_return_state"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				restored, err := url.ParseQuery(string(decoded))
+				if err != nil {
+					t.Fatal(err)
+				}
+				for k, v := range contextQuery {
+					if restored.Get(k) != v {
+						t.Fatalf("lost return context %s", k)
+					}
+				}
+				if restored.Get("source") != "checkout" {
+					t.Fatal("configured query lost")
+				}
+				submitted.Set("money", "999.00")
+				if err := epay.VerifyCallback(cfg, submitted); err == nil {
+					t.Fatal("tampered amount accepted")
+				}
+			})
+		}
 	}
 }
 
