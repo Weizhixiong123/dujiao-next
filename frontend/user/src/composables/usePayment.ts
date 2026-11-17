@@ -49,6 +49,8 @@ export function usePayment() {
   const capturing = ref(false)
   const redirecting = ref(false)
   const redirected = ref(false)
+  // 用户点击「我已完成付款」后进入确认态：加快轮询并展示确认进度。
+  const confirmingPayment = ref(false)
   const openedPayWindow = ref(false)
   const latestLoaded = ref(false)
   const cachedPayment = ref<any>(null)
@@ -389,7 +391,9 @@ export function usePayment() {
   })
 
   const showCountdown = computed(() => Boolean(expiresAtMs.value && order.value?.status === 'pending_payment'))
-  const showResultView = computed(() => Boolean(paymentResult.value && order.value && order.value.status === 'pending_payment' && !orderExpired.value && !orderCanceled.value))
+  // 确认态下支付成功时保留结果视图，让进度条走满后再跳转订单详情。
+  const showResultView = computed(() => Boolean(paymentResult.value && order.value && !orderExpired.value && !orderCanceled.value && (order.value.status === 'pending_payment' || (confirmingPayment.value && redirecting.value))))
+  const paymentConfirmed = computed(() => redirecting.value || shouldRedirect(order.value?.status))
   const pollingActive = computed(() => pollTimer.value !== null)
   const orderItems = computed(() => (Array.isArray(order.value?.items) ? order.value.items : []))
   const customerFeeApplied = computed(() => isCustomerSurchargePayment(paymentResult.value) && (amountToCents(paymentResult.value?.fee_amount) || 0) > 0)
@@ -716,13 +720,23 @@ export function usePayment() {
     pollTimer.value = window.setInterval(async () => {
       await captureCurrentPayment({ silent: true })
       await debouncedLoadOrder({ silent: true })
-    }, 5000)
+    }, confirmingPayment.value ? 2000 : 5000)
   }
 
   const stopPolling = () => {
     if (!pollTimer.value) return
     window.clearInterval(pollTimer.value)
     pollTimer.value = null
+  }
+
+  // 「我已完成付款」只加快查询订单状态，到账仍以后端确认（网关回调 / 主动查单）为准。
+  const handleConfirmPaid = async () => {
+    if (confirmingPayment.value || !paymentResult.value || order.value?.status !== 'pending_payment') return
+    confirmingPayment.value = true
+    stopPolling()
+    startPolling()
+    await captureCurrentPayment({ silent: true })
+    await debouncedLoadOrder({ silent: true })
   }
 
   const handleCopyPayLink = async () => {
@@ -1086,6 +1100,7 @@ export function usePayment() {
       redirectTimer.value = null
     }
 
+    const redirectDelay = confirmingPayment.value ? 1200 : 600
     redirectTimer.value = window.setTimeout(async () => {
       try {
         const failure = await router.push(target)
@@ -1102,7 +1117,7 @@ export function usePayment() {
           redirectTimer.value = null
         }
       }
-    }, 600)
+    }, redirectDelay)
   }
 
   const resetPayment = (reason: PaymentResetReason = 'generic') => {
@@ -1115,6 +1130,7 @@ export function usePayment() {
     paymentResult.value = null
     error.value = ''
     openedPayWindow.value = false
+    confirmingPayment.value = false
     resetRedirectState()
     latestLoaded.value = !resetPolicy.resumeLatestPayment
     if (resetPolicy.clearSelectedChannel) {
@@ -1242,6 +1258,7 @@ export function usePayment() {
       if (!status) return
       if (status === 'canceled') {
         error.value = t('payment.orderCanceled')
+        confirmingPayment.value = false
         stopPolling()
         stopCountdown()
         return
@@ -1406,6 +1423,8 @@ export function usePayment() {
     showCountdown,
     showResultView,
     pollingActive,
+    confirmingPayment,
+    paymentConfirmed,
     orderItems,
     // amounts
     customerFeeApplied,
@@ -1440,5 +1459,6 @@ export function usePayment() {
     handlePayment,
     handleGuestAuthSubmit,
     handleRefresh,
+    handleConfirmPaid,
   }
 }

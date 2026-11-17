@@ -1236,6 +1236,18 @@
   },
   "payment": {
     "perpayExactAmountTip": "Pay the exact amount displayed without changing it. Your order status updates automatically after payment.",
+    "confirmProgress": {
+      "idleHint": "After paying, tap the button below and we'll confirm your payment faster and deliver automatically.",
+      "action": "I've completed payment",
+      "checkingTitle": "Confirming payment…",
+      "checkingHint": "This usually takes 5–30 seconds. Please keep this page open.",
+      "slowHint": "Confirmation is taking longer than usual. If you've paid, please wait a little longer, or contact support with your order number.",
+      "paidTitle": "Payment successful",
+      "paidHint": "Delivering your order and opening the order details…",
+      "stepPaid": "Paid",
+      "stepConfirm": "Confirming",
+      "stepDeliver": "Delivery"
+    },
     "title": "Payment",
     "subtitle": "Choose payment method and proceed",
     "backToOrders": "Back to orders",

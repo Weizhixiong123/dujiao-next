@@ -1236,6 +1236,18 @@
   },
   "payment": {
     "perpayExactAmountTip": "請按顯示的實際應付金額付款，不要修改金額。付款後會自動更新訂單狀態。",
+    "confirmProgress": {
+      "idleHint": "掃碼付款完成後點擊下方按鈕，系統會加快確認到賬並自動發貨。",
+      "action": "我已完成付款",
+      "checkingTitle": "正在確認付款…",
+      "checkingHint": "通常需要 5～30 秒，請勿關閉本頁面。",
+      "slowHint": "確認時間較長。如已付款請繼續稍候，長時間未到賬請聯繫客服並提供訂單號。",
+      "paidTitle": "付款成功",
+      "paidHint": "正在為你發貨並跳轉到訂單詳情…",
+      "stepPaid": "已付款",
+      "stepConfirm": "確認到賬",
+      "stepDeliver": "自動發貨"
+    },
     "title": "發起支付",
     "subtitle": "選擇支付方式並完成支付",
     "backToOrders": "返回訂單",

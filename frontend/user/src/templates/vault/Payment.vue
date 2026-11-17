@@ -79,6 +79,13 @@
               <span v-if="copied" class="text-xs text-[color:var(--teal-strong)]">{{ t('payment.copied') }}</span>
             </div>
           </div>
+
+          <PaymentConfirmProgress
+            class="mt-3.5"
+            :confirming="confirmingPayment"
+            :paid="paymentConfirmed"
+            @confirm="handleConfirmPaid"
+          />
         </div>
 
         <div class="grid content-start gap-3.5">
@@ -256,6 +263,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import PaymentAmountBreakdown from '../../components/payment/PaymentAmountBreakdown.vue'
 import PaymentChannelSelector from '../../components/payment/PaymentChannelSelector.vue'
+import PaymentConfirmProgress from '../../components/payment/PaymentConfirmProgress.vue'
 import VaultCheckoutSteps from './components/VaultCheckoutSteps.vue'
 import { usePayment } from '../../composables/usePayment'
 
@@ -274,6 +282,6 @@ const {
   paymentWalletPaidDisplay, paymentOnlinePayDisplay, isChannelDisabledForAmount, channelAmountLimitHint, canSubmitPayment,
   formatDate, statusLabel, formatMoney, hasDiscountAmount, formatDiscountMoney, getLocalizedText, orderItemSkuText, fulfillmentTypeLabelText,
   handleCopyPayLink, handleCopyWalletAddress, handleOpenPayLink, restoreCachedPayment, handleChangePaymentMethod,
-  handlePayment, handleGuestAuthSubmit, handleRefresh,
+  handlePayment, handleGuestAuthSubmit, handleRefresh, confirmingPayment, paymentConfirmed, handleConfirmPaid,
 } = usePayment()
 </script>

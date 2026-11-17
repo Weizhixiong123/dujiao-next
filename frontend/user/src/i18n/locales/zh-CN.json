@@ -1188,6 +1188,18 @@
   },
   "payment": {
     "perpayExactAmountTip": "请按显示的实际应付金额付款，不要修改金额。付款后会自动更新订单状态。",
+    "confirmProgress": {
+      "idleHint": "扫码付款完成后点击下方按钮，系统会加快确认到账并自动发货。",
+      "action": "我已完成付款",
+      "checkingTitle": "正在确认付款…",
+      "checkingHint": "通常需要 5～30 秒，请勿关闭本页面。",
+      "slowHint": "确认时间较长。如已付款请继续稍候，长时间未到账请联系客服并提供订单号。",
+      "paidTitle": "付款成功",
+      "paidHint": "正在为你发货并跳转到订单详情…",
+      "stepPaid": "已付款",
+      "stepConfirm": "确认到账",
+      "stepDeliver": "自动发货"
+    },
     "title": "发起支付",
     "subtitle": "选择支付方式并完成支付",
     "backToOrders": "返回订单",

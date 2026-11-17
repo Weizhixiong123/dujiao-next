@@ -137,6 +137,12 @@
                   <span v-if="copied" class="text-xs text-success">{{ t('payment.copied') }}</span>
                 </div>
               </div>
+
+              <PaymentConfirmProgress
+                :confirming="confirmingPayment"
+                :paid="paymentConfirmed"
+                @confirm="handleConfirmPaid"
+              />
             </div>
 
             <div class="space-y-4">
@@ -494,6 +500,7 @@ import { Copy, ExternalLink } from 'lucide-vue-next'
 import { pageAlertVariant, pageAlertToneClass } from '../utils/alerts'
 import PaymentAmountBreakdown from '../components/payment/PaymentAmountBreakdown.vue'
 import PaymentChannelSelector from '../components/payment/PaymentChannelSelector.vue'
+import PaymentConfirmProgress from '../components/payment/PaymentConfirmProgress.vue'
 import EmptyState from '../components/EmptyState.vue'
 import CheckoutSteps from '../components/checkout/CheckoutSteps.vue'
 import { Input } from '@/components/ui/input'
@@ -517,6 +524,6 @@ const {
   paymentWalletPaidDisplay, paymentOnlinePayDisplay, isChannelDisabledForAmount, channelAmountLimitHint, canSubmitPayment,
   formatDate, statusLabel, formatMoney, hasDiscountAmount, formatDiscountMoney, getLocalizedText, orderItemSkuText, fulfillmentTypeLabelText,
   handleCopyPayLink, handleCopyWalletAddress, handleOpenPayLink, restoreCachedPayment, handleChangePaymentMethod,
-  handlePayment, handleGuestAuthSubmit, handleRefresh,
+  handlePayment, handleGuestAuthSubmit, handleRefresh, confirmingPayment, paymentConfirmed, handleConfirmPaid,
 } = usePayment()
 </script>
