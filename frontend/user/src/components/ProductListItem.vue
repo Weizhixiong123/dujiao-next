@@ -2,7 +2,7 @@
   <Card
     class="group relative overflow-hidden flex flex-row items-center rounded-xl transition-all cursor-pointer theme-slide-up"
     :class="isSoldOut(product)
-      ? 'opacity-85 grayscale-[0.25] saturate-50 border-destructive/30'
+      ? 'border-destructive/30'
       : 'hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md'"
     :style="{ animationDelay: `${index * animationStep}ms` }"
     @click="$emit('click', product.slug)">
@@ -11,18 +11,12 @@
     <div class="w-11 h-11 sm:w-16 sm:h-16 flex-shrink-0 overflow-hidden relative rounded-lg m-1.5 sm:m-2.5">
       <img v-if="product.images && getFirstImageUrl(product.images)" :src="getFirstImageUrl(product.images)"
         :alt="getLocalizedText(product.title)" loading="lazy"
-        class="w-full h-full object-cover transition-transform duration-500"
-        :class="isSoldOut(product) ? 'grayscale brightness-75' : 'group-hover:scale-110'" />
+        class="w-full h-full object-contain" />
       <img v-else-if="product.category?.icon" :src="getImageUrl(product.category.icon)"
         :alt="getLocalizedText(product.category?.name)" loading="lazy"
-        class="w-full h-full object-cover transition-transform duration-500"
-        :class="isSoldOut(product) ? 'grayscale brightness-75' : 'group-hover:scale-110'" />
+        class="w-full h-full object-contain" />
       <div v-else class="w-full h-full flex items-center justify-center bg-muted text-muted-foreground">
         <ImageIcon class="w-5 h-5" :stroke-width="1.5" />
-      </div>
-      <!-- Sold out overlay -->
-      <div v-if="isSoldOut(product)" class="absolute inset-0 bg-black/50 flex items-center justify-center">
-        <span class="text-white text-[10px] font-bold">{{ t('products.stockStatus.outOfStock') }}</span>
       </div>
     </div>
 

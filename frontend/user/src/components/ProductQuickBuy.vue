@@ -74,7 +74,7 @@
                   v-if="productImage"
                   :src="productImage"
                   :alt="productTitle"
-                  class="w-full h-full object-cover"
+                  class="w-full h-full object-contain bg-card"
                 />
                 <div v-else class="w-full h-full flex items-center justify-center bg-muted">
                   <ImageIcon class="w-7 h-7 text-muted-foreground" :stroke-width="1.5" />

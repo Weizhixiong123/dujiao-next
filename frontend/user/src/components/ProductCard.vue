@@ -2,29 +2,21 @@
   <Card
     class="group relative overflow-hidden flex flex-col h-full rounded-2xl transition-all theme-slide-up"
     :class="isSoldOut(product)
-      ? 'cursor-default opacity-85 grayscale-[0.25] saturate-50 border-destructive/30'
+      ? 'cursor-default border-destructive/30'
       : 'cursor-pointer hover:-translate-y-1 hover:border-primary/30 hover:shadow-lg'"
     :style="{ animationDelay: `${index * animationStep}ms` }"
     @click="$emit('click', product.slug)">
     <!-- Image Area -->
-    <div class="aspect-[4/3] overflow-hidden bg-muted relative shrink-0">
-      <div
-        class="absolute inset-0 z-10 transition-colors duration-300"
-        :class="isSoldOut(product) ? 'bg-black/15' : 'bg-black/15 group-hover:bg-black/5'"
-      ></div>
+    <div class="aspect-square overflow-hidden bg-muted relative shrink-0">
       <img v-if="displayImageSrc && !imageErrored" :src="displayImageSrc"
         :alt="getLocalizedText(product.title)" loading="lazy" decoding="async"
-        class="w-full h-full object-cover transform transition-transform duration-700 ease-out"
-        :class="[
-          isSoldOut(product) ? 'grayscale brightness-75' : 'group-hover:scale-105',
-        ]"
+        class="w-full h-full object-contain"
         @error="handleImageError" />
       <div v-else class="w-full h-full flex items-center justify-center text-muted-foreground" role="img"
         :aria-label="getLocalizedText(product.title)">
         <ImageIcon class="w-8 h-8 md:w-12 md:h-12" :stroke-width="1.5" aria-hidden="true" />
       </div>
 
-      <div v-if="isSoldOut(product)" class="absolute inset-0 z-20 bg-black/45"></div>
       <Badge
         v-if="isSoldOut(product)"
         variant="destructive"

@@ -23,8 +23,8 @@
       <section class="grid gap-11 py-2.5 lg:grid-cols-2">
         <!-- 图区 -->
         <div>
-          <div class="relative grid h-[380px] place-items-center overflow-hidden rounded-xl" :class="images.length ? '' : 'bg-[linear-gradient(135deg,#7b74f2,var(--red))]'">
-            <img v-if="currentImage" :src="currentImage" :alt="getLocalizedText(product.title)" class="absolute inset-0 h-full w-full object-cover" />
+          <div class="relative grid aspect-square place-items-center overflow-hidden rounded-xl" :class="images.length ? 'bg-card' : 'bg-[linear-gradient(135deg,#7b74f2,var(--red))]'">
+            <img v-if="currentImage" :src="currentImage" :alt="getLocalizedText(product.title)" class="absolute inset-0 h-full w-full object-contain" />
             <Package v-else class="h-[110px] w-[110px] text-white/95" />
           </div>
           <div v-if="images.length > 1" class="mt-3.5 flex flex-wrap gap-3">
@@ -35,7 +35,7 @@
               :class="img === currentImage ? 'border-primary' : 'border-border'"
               @click="currentImage = img"
             >
-              <img :src="img" :alt="`${idx + 1}`" loading="lazy" class="h-full w-full object-cover" />
+              <img :src="img" :alt="`${idx + 1}`" loading="lazy" class="h-full w-full object-contain" />
             </button>
           </div>
         </div>

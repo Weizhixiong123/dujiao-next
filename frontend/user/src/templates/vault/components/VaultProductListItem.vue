@@ -2,16 +2,14 @@
   <RouterLink
     :to="`/products/${product.slug}`"
     class="group flex items-center gap-3 rounded-lg border bg-card p-2.5 transition hover:border-hairline-strong hover:shadow-[var(--shadow-sm)] sm:gap-3.5 sm:p-3"
-    :class="{ 'opacity-[0.74]': soldOut }"
   >
     <!-- Thumbnail -->
     <span
       class="relative grid h-14 w-14 flex-none place-items-center overflow-hidden rounded-[11px] sm:h-16 sm:w-16"
       :class="coverClass"
     >
-      <img v-if="coverImage" :src="coverImage" :alt="title" loading="lazy" class="absolute inset-0 h-full w-full object-cover" @error="imageErrored = true" />
+      <img v-if="coverImage" :src="coverImage" :alt="title" loading="lazy" class="absolute inset-0 h-full w-full object-contain bg-card" @error="imageErrored = true" />
       <Package v-else class="relative z-[1] h-6 w-6 text-white" />
-      <span v-if="soldOut" class="absolute inset-0 grid place-items-center bg-black/55 text-[10px] font-bold text-white">{{ t('products.stockStatus.outOfStock') }}</span>
     </span>
 
     <!-- Info -->
