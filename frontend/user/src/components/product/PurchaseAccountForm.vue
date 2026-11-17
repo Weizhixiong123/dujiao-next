@@ -33,6 +33,7 @@ const busy = ref(false)
 const sending = ref(false)
 const error = ref('')
 const countdown = ref(0)
+const codeSent = ref(false)
 let timer: ReturnType<typeof setInterval> | undefined
 const loginCaptcha = ref<CaptchaPayload>({})
 const sendCaptcha = ref<CaptchaPayload>({})
@@ -48,6 +49,10 @@ const siteKey = computed(() => String(captchaConfig.value?.turnstile?.site_key |
 const needsLoginCaptcha = computed(() => provider.value !== 'none' && !!captchaConfig.value?.scenes?.login)
 const needsSendCaptcha = computed(() => provider.value !== 'none' && !!captchaConfig.value?.scenes?.register_send_code)
 const registrationEnabled = computed(() => app.config?.registration_enabled !== false)
+// 两个场景的验证令牌都只能使用一次，同一时间只展示一个验证组件：
+// 新用户在发送邮箱验证码前只显示发送验证，验证码发出后再显示提交所需的登录验证。
+const showSendCaptcha = computed(() => emailVerificationRequired.value && needsSendCaptcha.value && !codeSent.value)
+const showLoginCaptcha = computed(() => needsLoginCaptcha.value && !showSendCaptcha.value)
 
 function captchaPayload(scene: 'login' | 'send'): CaptchaPayload | undefined {
   const needed = scene === 'login' ? needsLoginCaptcha.value : needsSendCaptcha.value
@@ -72,9 +77,15 @@ function resetCaptcha(scene: 'login' | 'send') {
 async function sendCode() {
   if (sending.value || countdown.value > 0 || busy.value) return
   error.value = ''
+  if (needsSendCaptcha.value && codeSent.value) {
+    // 重新发送需要新的发送验证令牌，先切回发送验证组件。
+    codeSent.value = false
+    return
+  }
   sending.value = true
   try {
     await auth.sendVerifyCode({ email: email.value.trim(), purpose: 'register', invite_code: inviteCode.value.trim(), captcha_payload: captchaPayload('send') })
+    codeSent.value = true
     countdown.value = 60
     if (timer) clearInterval(timer)
     timer = setInterval(() => { if (--countdown.value <= 0) clearInterval(timer) }, 1000)
@@ -129,6 +140,7 @@ watch(email, () => {
   emailVerificationRequired.value = false
   inviteCodeRequired.value = false
   code.value = ''
+  codeSent.value = false
   if (timer) clearInterval(timer)
   countdown.value = 0
 })
@@ -160,8 +172,8 @@ onBeforeUnmount(() => {
           <Input :id="`${id}-invite`" v-model="inviteCode" required autocomplete="off" />
         </label>
         <template v-if="emailVerificationRequired">
-          <ImageCaptcha v-if="needsSendCaptcha && provider === 'image'" ref="sendImage" v-model="sendCaptcha" @config-stale="app.loadConfig(true)" />
-          <TurnstileCaptcha v-if="needsSendCaptcha && provider === 'turnstile'" ref="sendTurnstile" v-model="sendToken" :site-key="siteKey" />
+          <ImageCaptcha v-if="showSendCaptcha && provider === 'image'" ref="sendImage" v-model="sendCaptcha" @config-stale="app.loadConfig(true)" />
+          <TurnstileCaptcha v-if="showSendCaptcha && provider === 'turnstile'" ref="sendTurnstile" v-model="sendToken" :site-key="siteKey" />
           <label class="flex flex-col gap-2" :for="`${id}-code`">
             {{ t('purchaseAccount.emailCode') }}
             <div class="flex gap-2">
@@ -174,8 +186,8 @@ onBeforeUnmount(() => {
           <input v-model="agreed" type="checkbox" class="mt-1 accent-primary" :required="registrationRequired" />
           <span>{{ t('auth.register.agreementPrefix') }} <router-link to="/privacy" target="_blank" rel="noopener noreferrer" class="text-primary underline">{{ t('footer.privacy') }}</router-link> {{ t('auth.register.agreementAnd') }} <router-link to="/terms" target="_blank" rel="noopener noreferrer" class="text-primary underline">{{ t('footer.terms') }}</router-link></span>
         </label>
-        <ImageCaptcha v-if="needsLoginCaptcha && provider === 'image'" ref="loginImage" v-model="loginCaptcha" @config-stale="app.loadConfig(true)" />
-        <TurnstileCaptcha v-if="needsLoginCaptcha && provider === 'turnstile'" ref="loginTurnstile" v-model="loginToken" :site-key="siteKey" />
+        <ImageCaptcha v-if="showLoginCaptcha && provider === 'image'" ref="loginImage" v-model="loginCaptcha" @config-stale="app.loadConfig(true)" />
+        <TurnstileCaptcha v-if="showLoginCaptcha && provider === 'turnstile'" ref="loginTurnstile" v-model="loginToken" :site-key="siteKey" />
         <router-link to="/auth/forgot" class="text-sm text-primary underline">{{ t('auth.login.forgot') }}</router-link>
       </template>
       <template v-else>
