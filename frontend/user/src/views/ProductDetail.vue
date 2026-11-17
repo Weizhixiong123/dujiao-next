@@ -6,7 +6,7 @@
       <div v-if="loading" class="space-y-8">
         <div class="h-5 w-48 rounded theme-skeleton"></div>
         <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] gap-0 bg-card border rounded-3xl overflow-hidden">
-          <div class="p-4 md:p-8 bg-secondary border-r">
+          <div class="p-4 md:p-8 lg:p-10 lg:pr-0">
             <div class="h-[300px] md:h-[500px] rounded-xl theme-skeleton"></div>
             <div class="mt-4 flex gap-3 overflow-hidden">
               <div v-for="i in 4" :key="i" class="w-16 h-16 rounded-lg theme-skeleton shrink-0"></div>
@@ -44,7 +44,7 @@
 
         <!-- Main Info Card -->
         <div
-          class="bg-card backdrop-blur-xl border rounded-3xl overflow-clip mb-8 shadow-2xl">
+          class="bg-card backdrop-blur-xl border rounded-3xl overflow-hidden mb-8 shadow-2xl">
           <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] gap-0">
             <!-- Product Images (Left) -->
             <ProductImageGallery
@@ -55,7 +55,7 @@
             />
 
             <!-- Product Info (Right) -->
-            <div class="p-6 md:p-8 lg:p-10 flex flex-col justify-center">
+            <div class="p-6 md:p-8 lg:p-10 flex flex-col">
               <div class="mb-6">
                 <div v-if="categoryName" class="mb-3 text-xs uppercase tracking-wider text-muted-foreground">
                   {{ t('productDetail.categoryLabel') }} · {{ categoryName }}
@@ -245,7 +245,7 @@
                   </p>
                 </div>
 
-                <div class="mb-8">
+                <div v-if="getLocalizedText(product.description)" class="mb-8">
                   <h2 class="mb-3 text-sm font-bold uppercase tracking-widest text-muted-foreground">
                     {{ t('productDetail.description') }}
                   </h2>
