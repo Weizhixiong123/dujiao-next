@@ -433,6 +433,7 @@ func (a userLoginTransportAdapter) LoginOrRegister(ctx context.Context, req user
 	res, err := a.auth.LoginOrRegister(userauthapp.PurchaseLoginInput{
 		Email: req.Email, Password: req.Password, Code: req.Code, InviteCode: req.InviteCode,
 		AgreementAccepted: req.AgreementAccepted, RememberMe: req.RememberMe,
+		HumanVerified: req.HumanVerified,
 	})
 	if err != nil {
 		return nil, mapUserAuthTransportError(err)

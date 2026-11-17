@@ -150,6 +150,23 @@ func (s *Service) Verify(scene string, payload contract.VerifyPayload, clientIP 
 	}
 }
 
+// IsSceneEnabled 判断指定场景当前是否真正要求人机验证（场景已勾选且配置了有效的验证方式）。
+func (s *Service) IsSceneEnabled(scene string) (bool, error) {
+	setting, err := s.getSetting()
+	if err != nil {
+		return false, err
+	}
+	if !setting.IsSceneEnabled(scene) {
+		return false, nil
+	}
+	switch setting.Provider {
+	case constants.CaptchaProviderImage, constants.CaptchaProviderTurnstile:
+		return true, nil
+	default:
+		return false, nil
+	}
+}
+
 func (s *Service) ensureImageStore(setting settingssecurity.CaptchaSetting) base64Captcha.Store {
 	s.mu.Lock()
 	defer s.mu.Unlock()

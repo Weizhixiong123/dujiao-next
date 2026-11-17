@@ -361,6 +361,9 @@ func (s *Service) Register(email, password, code, inviteCode string, agreementAc
 type PurchaseLoginInput struct {
 	Email, Password, Code, InviteCode string
 	AgreementAccepted, RememberMe     bool
+
+	// HumanVerified 表示本次请求已通过开启中的人机验证（由 transport 层设置）。
+	HumanVerified bool
 }
 
 // LoginOrRegister authenticates existing accounts without ever replacing their password.
@@ -384,12 +387,22 @@ func (s *Service) LoginOrRegister(input PurchaseLoginInput) (*UserLoginResult, e
 	if !policy.Enabled {
 		return nil, ErrRegistrationDisabled
 	}
-	// 购买页注册与购买验证合并为一步：同一次人机验证（login 场景，由 transport 层校验）
-	// 即可完成注册，不再要求邮箱验证码。普通注册页仍按"邮箱验证"开关执行。
-	if !input.AgreementAccepted || (policy.InviteOnly && policy.InviteCode == "") {
-		return &UserLoginResult{RegistrationRequired: true, InviteCodeRequired: policy.InviteOnly}, nil
+	// 购买页注册与购买验证合并为一步：本次请求已通过开启中的人机验证时，免邮箱验证码。
+	// 未开启人机验证时退回"邮箱验证"开关，避免购买页注册失去全部防护。
+	verifyEmail := false
+	if !input.HumanVerified {
+		verifyEmail = true
+		if s.settingService != nil {
+			verifyEmail, err = s.settingService.GetEmailVerificationEnabled(true)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
-	user, token, expiresAt, err := s.Register(email, input.Password, "", input.InviteCode, input.AgreementAccepted, false)
+	if !input.AgreementAccepted || (verifyEmail && strings.TrimSpace(input.Code) == "") || (policy.InviteOnly && policy.InviteCode == "") {
+		return &UserLoginResult{RegistrationRequired: true, EmailVerificationRequired: verifyEmail, InviteCodeRequired: policy.InviteOnly}, nil
+	}
+	user, token, expiresAt, err := s.Register(email, input.Password, input.Code, input.InviteCode, input.AgreementAccepted, verifyEmail)
 	if errors.Is(err, ErrEmailExists) {
 		// A concurrent registration may win; still require this request's password.
 		return s.LoginStep1(email, input.Password, input.RememberMe)

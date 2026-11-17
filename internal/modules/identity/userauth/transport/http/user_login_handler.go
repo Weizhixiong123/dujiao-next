@@ -72,6 +72,14 @@ type UserLoginRequest struct {
 	Password          string                            `json:"password" binding:"required"`
 	RememberMe        bool                              `json:"remember_me"`
 	CaptchaPayload    captchahttp.CaptchaPayloadRequest `json:"captcha_payload"`
+
+	// HumanVerified 仅由服务端在本次请求通过已开启的登录人机验证后设置，客户端无法提交。
+	HumanVerified bool `json:"-"`
+}
+
+// captchaSceneChecker 可选能力：查询某个人机验证场景当前是否真正开启。
+type captchaSceneChecker interface {
+	SceneEnabled(scene string) (bool, error)
 }
 
 func (h *UserLoginHandler) recordLogin(c *gin.Context, email string, userID uint, status, failReason, source string) {
@@ -182,6 +190,11 @@ func (h *UserLoginHandler) userLogin(c *gin.Context, autoRegister bool) {
 	var res *AuthLoginResult
 	var err error
 	if autoRegister {
+		// 走到这里说明登录场景的人机验证已通过；只有该场景确实开启时，才视为已完成人机验证。
+		if checker, ok := h.captcha.(captchaSceneChecker); ok {
+			enabled, checkErr := checker.SceneEnabled(constants.CaptchaSceneLogin)
+			req.HumanVerified = checkErr == nil && enabled
+		}
 		res, err = h.auth.LoginOrRegister(c.Request.Context(), req)
 	} else {
 		res, err = h.auth.LoginStep1(c.Request.Context(), req.Email, req.Password, req.RememberMe)
