@@ -10,7 +10,8 @@
     <div class="aspect-square overflow-hidden bg-muted relative shrink-0">
       <img v-if="displayImageSrc && !imageErrored" :src="displayImageSrc"
         :alt="getLocalizedText(product.title)" loading="lazy" decoding="async"
-        class="w-full h-full object-contain"
+        class="w-full h-full object-contain transition-[filter]"
+        :class="isSoldOut(product) ? 'grayscale opacity-70' : ''"
         @error="handleImageError" />
       <div v-else class="w-full h-full flex items-center justify-center text-muted-foreground" role="img"
         :aria-label="getLocalizedText(product.title)">
