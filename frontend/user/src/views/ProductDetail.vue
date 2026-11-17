@@ -55,7 +55,7 @@
             />
 
             <!-- Product Info (Right) -->
-            <div class="p-6 md:p-8 lg:p-10 flex flex-col">
+            <div class="p-6 md:p-8 lg:p-10 lg:pb-8 flex flex-col">
               <div class="mb-6">
                 <div v-if="categoryName" class="mb-3 text-xs uppercase tracking-wider text-muted-foreground">
                   {{ t('productDetail.categoryLabel') }} · {{ categoryName }}
@@ -256,7 +256,7 @@
               </div>
 
               <!-- Quantity Selector -->
-                <div class="mb-8">
+                <div>
                   <h2 class="mb-3 text-sm font-bold uppercase tracking-widest text-muted-foreground">
                     {{ t('productDetail.quantity') }}
                   </h2>
@@ -287,28 +287,27 @@
                     </button>
                   </div>
                 </div>
+            </div>
+          </div>
 
-              <!-- Purchase Actions (Desktop + original position) -->
-              <div ref="purchaseActionsRef" class="mt-auto space-y-6">
-                <Alert v-if="cannotPurchaseReason" variant="destructive">
-                  <AlertDescription class="font-semibold">{{ cannotPurchaseReason }}</AlertDescription>
-                </Alert>
-                <Alert v-if="purchaseWarning" class="border-warning/40 text-warning">
-                  <AlertDescription class="font-semibold text-warning">{{ purchaseWarning }}</AlertDescription>
-                </Alert>
+          <!-- Purchase Actions: 横跨两栏，避免图片下方留白 -->
+          <div ref="purchaseActionsRef" class="space-y-6 px-6 pb-6 md:px-8 md:pb-8 lg:px-10 lg:pb-10">
+            <Alert v-if="cannotPurchaseReason" variant="destructive">
+              <AlertDescription class="font-semibold">{{ cannotPurchaseReason }}</AlertDescription>
+            </Alert>
+            <Alert v-if="purchaseWarning" class="border-warning/40 text-warning">
+              <AlertDescription class="font-semibold text-warning">{{ purchaseWarning }}</AlertDescription>
+            </Alert>
 
-                <div class="space-y-3">
-                  <PurchaseAccountForm v-if="requiresLogin" :disabled="!canPurchase" @authenticated="buyNow" />
-                  <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Button variant="secondary" class="h-12 font-bold" :disabled="!canPurchase" @click="addToCart">
-                      {{ t('productDetail.addToCart') }}
-                    </Button>
-                    <Button class="h-12 font-bold" :disabled="!canPurchase" @click="buyNow">
-                      {{ t('productDetail.buyNow') }}
-                    </Button>
-                  </div>
-                </div>
-
+            <div class="space-y-3">
+              <PurchaseAccountForm v-if="requiresLogin" :disabled="!canPurchase" @authenticated="buyNow" />
+              <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Button variant="secondary" class="h-12 font-bold" :disabled="!canPurchase" @click="addToCart">
+                  {{ t('productDetail.addToCart') }}
+                </Button>
+                <Button class="h-12 font-bold" :disabled="!canPurchase" @click="buyNow">
+                  {{ t('productDetail.buyNow') }}
+                </Button>
               </div>
             </div>
           </div>
