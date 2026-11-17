@@ -1065,6 +1065,30 @@ export function usePayment() {
 
   const handlePayment = debounceAsync(performPayment, 200)
 
+  // 结算页已选好支付方式但发起支付失败时（autopay=1），订单与渠道就绪后自动用该渠道重试一次，
+  // 不让用户在支付页再选一次支付方式。已有可恢复的支付记录时不重复发起。
+  const autoPayPending = ref(readRouteQueryFlag('autopay'))
+  watch(
+    () => [autoPayPending.value, loading.value, submitting.value, order.value?.status, paymentResult.value, channels.value],
+    () => {
+      if (!autoPayPending.value || loading.value || submitting.value || !order.value) return
+      if (order.value.status !== 'pending_payment' || paymentResult.value || orderExpired.value) {
+        autoPayPending.value = false
+        return
+      }
+      const channel = findChannelByID(Number(readRouteQueryValue('channel_id')))
+      if (!channel || isChannelDisabledForAmount(channel)) return
+      autoPayPending.value = false
+      selectedChannelId.value = channel.id
+      if (showBalanceOption.value && readRouteQueryFlag('use_balance')) {
+        useBalance.value = true
+      }
+      void router.replace({ path: route.path, query: buildPayRouteQuery() })
+      void performPayment()
+    },
+    { deep: true }
+  )
+
   const shouldRedirect = (status?: string) => {
     if (!status) return false
     return ['paid', 'fulfilling', 'partially_delivered', 'delivered', 'completed'].includes(status)

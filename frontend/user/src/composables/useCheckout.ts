@@ -858,9 +858,14 @@ export function useCheckout() {
       clearSourceStore()
 
       // Redirect to the existing Payment page which handles all payment display
-      const query = userAuthStore.isAuthenticated
+      let query = userAuthStore.isAuthenticated
         ? `order_no=${encodeURIComponent(responseData.order_no)}`
         : `guest=1&order_no=${encodeURIComponent(responseData.order_no)}`
+      // 下单成功但发起支付失败时，让支付页用已选渠道自动重试，避免用户再选一次支付方式。
+      if (responseData.payment_error && payload.channel_id) {
+        query += `&autopay=1&channel_id=${encodeURIComponent(String(payload.channel_id))}`
+        if (payload.use_balance) query += '&use_balance=1'
+      }
       router.push(`/pay?${query}`)
     } catch (err: any) {
       error.value = err.message || t('checkout.errors.submitFailed')
