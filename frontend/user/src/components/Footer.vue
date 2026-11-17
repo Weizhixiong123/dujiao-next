@@ -159,7 +159,7 @@ const brandInitial = computed(() => {
 
 const brandLogo = computed(() => {
   const raw = String(config.value?.brand?.site_logo || '').trim()
-  return raw ? getImageUrl(raw) : ''
+  return raw ? getImageUrl(raw) : '/dj.svg'
 })
 
 const isListMode = computed(() => config.value?.template_mode === 'list')

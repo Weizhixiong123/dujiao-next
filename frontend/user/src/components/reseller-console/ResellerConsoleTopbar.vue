@@ -233,7 +233,7 @@ const brandSiteName = computed(() => {
 
 const brandLogo = computed(() => {
   const raw = String(appStore.config?.brand?.site_logo || '').trim()
-  return raw ? getImageUrl(raw) : ''
+  return raw ? getImageUrl(raw) : '/dj.svg'
 })
 
 const isActive = (path: string) => {
