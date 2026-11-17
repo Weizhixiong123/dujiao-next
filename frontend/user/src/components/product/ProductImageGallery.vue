@@ -1,5 +1,6 @@
 <template>
-  <div class="p-4 md:p-8 bg-secondary border-r">
+  <div class="p-4 md:p-8 bg-secondary border-b lg:border-b-0 lg:border-r">
+    <div class="lg:sticky lg:top-24">
     <div class="mb-4 md:mb-6 relative group"
       @touchstart="onImageTouchStart"
       @touchend="onImageTouchEnd">
@@ -18,6 +19,7 @@
         :class="currentImage === image ? 'border-primary ring-1 ring-primary/40 opacity-100' : 'border-transparent opacity-60 hover:opacity-100 hover:scale-105'">
         <img :src="image" :alt="`Image ${index + 1}`" loading="lazy" class="w-full h-full object-contain bg-card" />
       </div>
+    </div>
     </div>
   </div>
 </template>
