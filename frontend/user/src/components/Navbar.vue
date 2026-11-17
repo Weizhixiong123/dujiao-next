@@ -252,7 +252,7 @@ const cartCount = computed(() => cartStore.totalItems)
 
 const brandSiteName = computed(() => {
   const text = String(appStore.config?.brand?.site_name || '').trim()
-  return text !== '' ? text : 'gptsuchong'
+  return text !== '' ? text : 'GPT 速充'
 })
 
 const brandLogo = computed(() => {

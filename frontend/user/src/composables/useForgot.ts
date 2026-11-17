@@ -20,7 +20,7 @@ export function useForgot() {
 
   const brandSiteName = computed(() => {
     const siteName = String(appStore.config?.brand?.site_name || '').trim()
-    return siteName !== '' ? siteName : 'gptsuchong'
+    return siteName !== '' ? siteName : 'GPT 速充'
   })
 
   const emailVerificationEnabled = computed(() => appStore.config?.email_verification_enabled !== false)

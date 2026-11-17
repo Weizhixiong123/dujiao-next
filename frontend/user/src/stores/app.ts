@@ -42,7 +42,7 @@ export const useAppStore = defineStore('app', () => {
             const localized = getLocalizedText(seo?.title, lang)
             if (localized) return String(localized).trim() || undefined
             const siteName = String(config.value?.brand?.site_name || '').trim()
-            return siteName || 'gptsuchong'
+            return siteName || 'GPT 速充'
         },
         link: () => [{ key: 'favicon', rel: 'icon', href: siteIconHref.value }],
         meta: () => {

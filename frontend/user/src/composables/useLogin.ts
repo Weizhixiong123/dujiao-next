@@ -39,7 +39,7 @@ export function useLogin() {
 
   const brandSiteName = computed(() => {
     const siteName = String(appStore.config?.brand?.site_name || '').trim()
-    return siteName !== '' ? siteName : 'gptsuchong'
+    return siteName !== '' ? siteName : 'GPT 速充'
   })
 
   const email = ref('')

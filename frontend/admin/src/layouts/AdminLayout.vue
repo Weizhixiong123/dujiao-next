@@ -762,12 +762,11 @@ onBeforeUnmount(() => {
         class="hidden md:flex border-r border-border bg-card flex-col sticky top-0 h-screen overflow-y-auto transition-all duration-300"
         :class="sidebarCollapsed ? 'w-16' : 'w-64'"
       >
-        <div class="py-6" :class="sidebarCollapsed ? 'px-2' : 'px-6'">
-          <div v-if="!sidebarCollapsed" class="text-xl font-semibold tracking-tight">
-            {{ t('admin.brand') }}
-          </div>
-          <div v-if="!sidebarCollapsed" class="text-xs text-muted-foreground mt-1">{{ t('admin.layout.controlRoom') }}</div>
-          <div v-if="sidebarCollapsed" class="text-lg font-semibold tracking-tight text-center">D&J</div>
+        <div class="py-5" :class="sidebarCollapsed ? 'px-3.5' : 'px-6'">
+          <RouterLink to="/" :title="t('admin.brand')" :aria-label="t('admin.brand')" class="flex items-center gap-3 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <span aria-hidden="true" class="size-9 shrink-0 bg-foreground [mask-image:url('/dj.svg')] [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]" />
+            <span v-if="!sidebarCollapsed" class="truncate text-lg font-semibold tracking-tight">{{ t('admin.brand') }}</span>
+          </RouterLink>
         </div>
         <div v-if="!sidebarCollapsed" class="px-3 pb-2">
           <Input
@@ -852,7 +851,7 @@ onBeforeUnmount(() => {
         <!-- Collapse toggle button -->
         <div class="border-t border-border">
           <div v-if="!sidebarCollapsed" class="px-6 py-3 text-[11px] text-muted-foreground space-y-1">
-            <p>© {{ new Date().getFullYear() }} gptsuchong <span v-if="appVersion" class="text-muted-foreground/70">{{ appVersion }}</span></p>
+            <p>© {{ new Date().getFullYear() }} GPT 速充 <span v-if="appVersion" class="text-muted-foreground/70">{{ appVersion }}</span></p>
             <a
               href="https://github.com/Weizhixiong123/dujiao-next"
               target="_blank"
@@ -881,11 +880,11 @@ onBeforeUnmount(() => {
       <Sheet v-model:open="mobileNavOpen">
         <SheetContent side="left" class="w-72 p-0 flex flex-col">
           <SheetTitle class="sr-only">{{ t('admin.layout.navigation') }}</SheetTitle>
-          <div class="px-6 py-6">
-            <div class="text-xl font-semibold tracking-tight">
-              {{ t('admin.brand') }}
-            </div>
-            <div class="text-xs text-muted-foreground mt-1">{{ t('admin.layout.controlRoom') }}</div>
+          <div class="px-6 py-5">
+            <RouterLink to="/" :title="t('admin.brand')" class="flex items-center gap-3 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring" @click="mobileNavOpen = false">
+              <span aria-hidden="true" class="size-9 shrink-0 bg-foreground [mask-image:url('/dj.svg')] [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]" />
+              <span class="truncate text-lg font-semibold tracking-tight">{{ t('admin.brand') }}</span>
+            </RouterLink>
           </div>
           <div class="px-3 pb-2">
             <Input
@@ -941,7 +940,7 @@ onBeforeUnmount(() => {
             </div>
           </nav>
           <div class="px-6 py-4 border-t border-border text-[11px] text-muted-foreground space-y-1">
-            <p>© {{ new Date().getFullYear() }} gptsuchong <span v-if="appVersion" class="text-muted-foreground/70">{{ appVersion }}</span></p>
+            <p>© {{ new Date().getFullYear() }} GPT 速充 <span v-if="appVersion" class="text-muted-foreground/70">{{ appVersion }}</span></p>
           </div>
         </SheetContent>
       </Sheet>
