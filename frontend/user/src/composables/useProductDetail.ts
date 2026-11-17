@@ -447,7 +447,7 @@ export function useProductDetail(options: { onLoaded?: () => void } = {}) {
     if (!canPurchase.value) return
     purchaseWarning.value = ''
     if (requiresLogin.value) {
-      router.push(`/auth/login?redirect=${encodeURIComponent(route.fullPath)}`)
+      goLogin()
       return
     }
     const sku = selectedSku.value
@@ -482,7 +482,7 @@ export function useProductDetail(options: { onLoaded?: () => void } = {}) {
     if (!canPurchase.value) return
     if (!product.value) return
     if (requiresLogin.value) {
-      router.push(`/auth/login?redirect=${encodeURIComponent(route.fullPath)}`)
+      goLogin()
       return
     }
 
@@ -552,7 +552,9 @@ export function useProductDetail(options: { onLoaded?: () => void } = {}) {
   })
 
   const goLogin = () => {
-    router.push(`/auth/login?redirect=${encodeURIComponent(route.fullPath)}`)
+    const form = document.querySelector<HTMLFormElement>('[data-purchase-account]')
+    form?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    form?.querySelector<HTMLInputElement>('input[type="email"]')?.focus({ preventScroll: true })
   }
 
   const loadProduct = async () => {

@@ -147,13 +147,16 @@ type UserChallengeClaims struct {
 
 // UserLoginResult 用户登录第一步结果
 type UserLoginResult struct {
-	RequiresTOTP       bool
-	User               *userdomain.User
-	Token              string
-	ExpiresAt          time.Time
-	ChallengeToken     string
-	ChallengeJTI       string
-	ChallengeExpiresAt time.Time
+	RegistrationRequired      bool
+	EmailVerificationRequired bool
+	InviteCodeRequired        bool
+	RequiresTOTP              bool
+	User                      *userdomain.User
+	Token                     string
+	ExpiresAt                 time.Time
+	ChallengeToken            string
+	ChallengeJTI              string
+	ChallengeExpiresAt        time.Time
 	// InviteRequired 表示第三方身份已验证但需补填邀请码才能建号，InviteTicket 用于提交补全。
 	InviteRequired bool
 	InviteTicket   string
@@ -352,6 +355,54 @@ func (s *Service) Register(email, password, code, inviteCode string, agreementAc
 	}
 
 	return user, token, expiresAt, nil
+}
+
+// PurchaseLoginInput combines password authentication and policy-controlled registration.
+type PurchaseLoginInput struct {
+	Email, Password, Code, InviteCode string
+	AgreementAccepted, RememberMe     bool
+}
+
+// LoginOrRegister authenticates existing accounts without ever replacing their password.
+// New accounts use the same registration policy and transaction as ordinary signup.
+func (s *Service) LoginOrRegister(input PurchaseLoginInput) (*UserLoginResult, error) {
+	email, err := normalizeUserSuppliedEmail(input.Email)
+	if err != nil {
+		return nil, err
+	}
+	user, err := s.userRepo.GetByEmail(email)
+	if err != nil {
+		return nil, err
+	}
+	if user != nil {
+		return s.LoginStep1(email, input.Password, input.RememberMe)
+	}
+	policy, err := s.loadRegistrationPolicy(input.InviteCode)
+	if err != nil {
+		return nil, err
+	}
+	if !policy.Enabled {
+		return nil, ErrRegistrationDisabled
+	}
+	verifyEmail := true
+	if s.settingService != nil {
+		verifyEmail, err = s.settingService.GetEmailVerificationEnabled(true)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if !input.AgreementAccepted || (verifyEmail && strings.TrimSpace(input.Code) == "") || (policy.InviteOnly && policy.InviteCode == "") {
+		return &UserLoginResult{RegistrationRequired: true, EmailVerificationRequired: verifyEmail, InviteCodeRequired: policy.InviteOnly}, nil
+	}
+	user, token, expiresAt, err := s.Register(email, input.Password, input.Code, input.InviteCode, input.AgreementAccepted, verifyEmail)
+	if errors.Is(err, ErrEmailExists) {
+		// A concurrent registration may win; still require this request's password.
+		return s.LoginStep1(email, input.Password, input.RememberMe)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &UserLoginResult{User: user, Token: token, ExpiresAt: expiresAt}, nil
 }
 
 // LoginStep1 用户密码登录第一步：校验密码，根据是否启用 2FA 返回 challenge token 或正式 JWT。

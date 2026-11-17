@@ -52,6 +52,14 @@ func RegisterUserLoginAuthRoutes(auth gin.IRoutes, handler *UserLoginHandler, ra
 	auth.POST("/login", rateLimit, handler.UserLogin)
 }
 
+// RegisterUserPurchaseAuthRoutes applies both signup IP and password-login limits.
+func RegisterUserPurchaseAuthRoutes(auth gin.IRoutes, handler *UserLoginHandler, registrationLimit, loginLimit gin.HandlerFunc) {
+	if auth == nil || handler == nil || registrationLimit == nil || loginLimit == nil {
+		panic("user purchase auth routes: required dependency is nil")
+	}
+	auth.POST("/login-or-register", registrationLimit, loginLimit, handler.UserLoginOrRegister)
+}
+
 // RegisterUser2FAAuthRoutes 注册公开的 2FA 挑战验证端点（需附带限流中间件）。
 func RegisterUser2FAAuthRoutes(auth gin.IRoutes, handler *User2FAHandler, rateLimit gin.HandlerFunc) {
 	if auth == nil || handler == nil || rateLimit == nil {

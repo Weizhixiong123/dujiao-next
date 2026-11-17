@@ -1748,5 +1748,25 @@
     "authInvalid": "Credentials mismatch, please try again",
     "authSubmit": "Save and search",
     "authClear": "Clear saved info"
+  },
+  "purchaseAccount": {
+    "title": "Store account",
+    "hint": "New email addresses are registered automatically. Existing customers must enter their store password.",
+    "loginOnly": "Enter your email and store password.",
+    "email": "Email",
+    "password": "Password",
+    "emailPlaceholder": "Your email",
+    "passwordPlaceholder": "Set / enter password",
+    "completeRegistration": "First time using this email? Accept the terms and complete the verification below.",
+    "inviteCode": "Invitation code",
+    "emailCode": "Email verification code",
+    "sendCode": "Send code",
+    "recoveryCode": "Two-factor recovery code",
+    "totpCode": "Two-factor authentication code",
+    "useTotp": "Use authenticator",
+    "useRecovery": "Use recovery code",
+    "back": "Back to password",
+    "processing": "Verifying…",
+    "continue": "Verify and continue purchase"
   }
 }

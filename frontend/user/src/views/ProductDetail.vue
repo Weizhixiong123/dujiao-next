@@ -298,9 +298,7 @@
                 </Alert>
 
                 <div class="space-y-3">
-                  <Button v-if="requiresLogin" class="w-full h-12 font-bold" @click="goLogin">
-                    {{ t('productDetail.loginToBuy') }}
-                  </Button>
+                  <PurchaseAccountForm v-if="requiresLogin" :disabled="!canPurchase" @authenticated="buyNow" />
                   <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Button variant="secondary" class="h-12 font-bold" :disabled="!canPurchase" @click="addToCart">
                       {{ t('productDetail.addToCart') }}
@@ -411,6 +409,7 @@
 </template>
 
 <script setup lang="ts">
+import PurchaseAccountForm from '../components/product/PurchaseAccountForm.vue'
 import { ref, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ArrowLeft, Lock, Minus, Pencil, Plus, RotateCw, Tag, UserPlus, Zap } from 'lucide-vue-next'

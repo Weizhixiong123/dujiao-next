@@ -1748,5 +1748,25 @@
     "authInvalid": "資訊不匹配，請重新輸入",
     "authSubmit": "保存並查詢",
     "authClear": "清除已保存資訊"
+  },
+  "purchaseAccount": {
+    "title": "本站帳號",
+    "hint": "新信箱自動註冊，已有帳號請輸入本站密碼。",
+    "loginOnly": "請輸入信箱和本站密碼。",
+    "email": "電子信箱",
+    "password": "密碼",
+    "emailPlaceholder": "你的信箱",
+    "passwordPlaceholder": "設定 / 輸入密碼",
+    "completeRegistration": "首次使用此信箱，請同意服務條款並完成以下驗證。",
+    "inviteCode": "邀請碼",
+    "emailCode": "信箱驗證碼",
+    "sendCode": "發送驗證碼",
+    "recoveryCode": "兩步驗證恢復碼",
+    "totpCode": "兩步驗證碼",
+    "useTotp": "使用驗證器",
+    "useRecovery": "使用恢復碼",
+    "back": "返回帳號密碼",
+    "processing": "驗證中…",
+    "continue": "驗證並繼續購買"
   }
 }

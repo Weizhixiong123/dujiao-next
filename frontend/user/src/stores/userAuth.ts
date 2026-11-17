@@ -87,6 +87,20 @@ export const useUserAuthStore = defineStore('user-auth', () => {
         }
     }
 
+    const loginOrRegister = async (payload: any): Promise<{ registrationRequired: boolean; emailVerificationRequired?: boolean; inviteCodeRequired?: boolean; requiresTotp: boolean }> => {
+        loading.value = true
+        try {
+            const response = await userAuthAPI.loginOrRegister(payload)
+            const data = response.data.data
+            if (data?.registration_required) {
+                return { registrationRequired: true, emailVerificationRequired: !!data.email_verification_required, inviteCodeRequired: !!data.invite_code_required, requiresTotp: false }
+            }
+            return { ...handleLoginResponse(data), registrationRequired: false }
+        } finally {
+            loading.value = false
+        }
+    }
+
     const verify2FA = async (payload: { code?: string; recovery_code?: string }) => {
         if (!challengeToken.value) {
             throw new Error('challenge_token_missing')
@@ -232,6 +246,7 @@ export const useUserAuthStore = defineStore('user-auth', () => {
         sendVerifyCode,
         register,
         login,
+        loginOrRegister,
         verify2FA,
         clearChallenge,
         telegramLogin,

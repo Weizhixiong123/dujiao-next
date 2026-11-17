@@ -265,14 +265,17 @@ func toUserAuthTransportLoginResult(ctx context.Context, auth *userauthapp.Servi
 		return nil, err
 	}
 	return &userauthtransport.AuthLoginResult{
-		RequiresTOTP:       result.RequiresTOTP,
-		User:               result.User,
-		Token:              token,
-		ExpiresAt:          result.ExpiresAt,
-		ChallengeToken:     result.ChallengeToken,
-		ChallengeExpiresAt: result.ChallengeExpiresAt,
-		InviteRequired:     result.InviteRequired,
-		InviteTicket:       result.InviteTicket,
+		RegistrationRequired:      result.RegistrationRequired,
+		EmailVerificationRequired: result.EmailVerificationRequired,
+		InviteCodeRequired:        result.InviteCodeRequired,
+		RequiresTOTP:              result.RequiresTOTP,
+		User:                      result.User,
+		Token:                     token,
+		ExpiresAt:                 result.ExpiresAt,
+		ChallengeToken:            result.ChallengeToken,
+		ChallengeExpiresAt:        result.ChallengeExpiresAt,
+		InviteRequired:            result.InviteRequired,
+		InviteTicket:              result.InviteTicket,
 	}, nil
 }
 
@@ -420,6 +423,17 @@ func (a userLoginTransportAdapter) Register(ctx context.Context, email, password
 
 func (a userLoginTransportAdapter) LoginStep1(ctx context.Context, email, password string, rememberMe bool) (*userauthtransport.AuthLoginResult, error) {
 	res, err := a.auth.LoginStep1(email, password, rememberMe)
+	if err != nil {
+		return nil, mapUserAuthTransportError(err)
+	}
+	return toUserAuthTransportLoginResult(ctx, a.auth, res)
+}
+
+func (a userLoginTransportAdapter) LoginOrRegister(ctx context.Context, req userauthtransport.UserLoginRequest) (*userauthtransport.AuthLoginResult, error) {
+	res, err := a.auth.LoginOrRegister(userauthapp.PurchaseLoginInput{
+		Email: req.Email, Password: req.Password, Code: req.Code, InviteCode: req.InviteCode,
+		AgreementAccepted: req.AgreementAccepted, RememberMe: req.RememberMe,
+	})
 	if err != nil {
 		return nil, mapUserAuthTransportError(err)
 	}

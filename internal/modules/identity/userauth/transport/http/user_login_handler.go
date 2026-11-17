@@ -33,6 +33,7 @@ type UserLoginSettings interface {
 type UserLoginAuth interface {
 	Register(ctx context.Context, email, password, code, inviteCode string, agreementAccepted, emailVerificationEnabled bool) (*userdomain.User, string, time.Time, error)
 	LoginStep1(ctx context.Context, email, password string, rememberMe bool) (*AuthLoginResult, error)
+	LoginOrRegister(ctx context.Context, req UserLoginRequest) (*AuthLoginResult, error)
 }
 
 // UserLoginHandler 处理公开的注册与登录 HTTP 请求。
@@ -64,10 +65,13 @@ type UserRegisterRequest struct {
 
 // UserLoginRequest 登录请求。
 type UserLoginRequest struct {
-	Email          string                            `json:"email" binding:"required"`
-	Password       string                            `json:"password" binding:"required"`
-	RememberMe     bool                              `json:"remember_me"`
-	CaptchaPayload captchahttp.CaptchaPayloadRequest `json:"captcha_payload"`
+	Code              string                            `json:"code"`
+	InviteCode        string                            `json:"invite_code"`
+	AgreementAccepted bool                              `json:"agreement_accepted"`
+	Email             string                            `json:"email" binding:"required"`
+	Password          string                            `json:"password" binding:"required"`
+	RememberMe        bool                              `json:"remember_me"`
+	CaptchaPayload    captchahttp.CaptchaPayloadRequest `json:"captcha_payload"`
 }
 
 func (h *UserLoginHandler) recordLogin(c *gin.Context, email string, userID uint, status, failReason, source string) {
@@ -137,6 +141,14 @@ func (h *UserLoginHandler) UserRegister(c *gin.Context) {
 
 // UserLogin 用户登录。
 func (h *UserLoginHandler) UserLogin(c *gin.Context) {
+	h.userLogin(c, false)
+}
+
+func (h *UserLoginHandler) UserLoginOrRegister(c *gin.Context) {
+	h.userLogin(c, true)
+}
+
+func (h *UserLoginHandler) userLogin(c *gin.Context, autoRegister bool) {
 	var req UserLoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.recordLogin(c, req.Email, 0, constants.LoginLogStatusFailed, constants.LoginLogFailReasonBadRequest, constants.LoginLogSourceWeb)
@@ -167,7 +179,13 @@ func (h *UserLoginHandler) UserLogin(c *gin.Context) {
 		}
 	}
 
-	res, err := h.auth.LoginStep1(c.Request.Context(), req.Email, req.Password, req.RememberMe)
+	var res *AuthLoginResult
+	var err error
+	if autoRegister {
+		res, err = h.auth.LoginOrRegister(c.Request.Context(), req)
+	} else {
+		res, err = h.auth.LoginStep1(c.Request.Context(), req.Email, req.Password, req.RememberMe)
+	}
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrInvalidEmail):
@@ -184,11 +202,19 @@ func (h *UserLoginHandler) UserLogin(c *gin.Context) {
 			ginutil.RespondError(c, response.CodeUnauthorized, "error.user_disabled", nil)
 		default:
 			h.recordLogin(c, req.Email, 0, constants.LoginLogStatusFailed, constants.LoginLogFailReasonInternalError, constants.LoginLogSourceWeb)
+			if autoRegister {
+				h.respondPurchaseRegistrationError(c, err)
+				return
+			}
 			ginutil.RespondError(c, response.CodeInternal, "error.login_failed", err)
 		}
 		return
 	}
 
+	if res.RegistrationRequired {
+		response.Success(c, gin.H{"registration_required": true, "email_verification_required": res.EmailVerificationRequired, "invite_code_required": res.InviteCodeRequired})
+		return
+	}
 	if res.RequiresTOTP {
 		h.recordLogin(c, res.User.Email, res.User.ID, constants.LoginLogStatusSuccess, constants.LoginLogPasswordOK2FAPending, constants.LoginLogSourceWeb)
 		response.Success(c, gin.H{
@@ -206,6 +232,32 @@ func (h *UserLoginHandler) UserLogin(c *gin.Context) {
 		"token":         res.Token,
 		"expires_at":    res.ExpiresAt.Format("2006-01-02T15:04:05Z07:00"),
 	})
+}
+
+func (h *UserLoginHandler) respondPurchaseRegistrationError(c *gin.Context, err error) {
+	if respondInviteCodeError(c, err) {
+		return
+	}
+	switch {
+	case errors.Is(err, ErrRegistrationDisabled):
+		ginutil.RespondError(c, response.CodeForbidden, "error.registration_disabled", nil)
+	case errors.Is(err, ErrEmailExists):
+		ginutil.RespondError(c, response.CodeBadRequest, "error.email_exists", nil)
+	case errors.Is(err, ErrEmailDomainNotAllowed):
+		ginutil.RespondError(c, response.CodeBadRequest, "error.email_domain_not_allowed", nil)
+	case errors.Is(err, ErrVerifyCodeInvalid):
+		ginutil.RespondError(c, response.CodeBadRequest, "error.verify_code_invalid", nil)
+	case errors.Is(err, ErrVerifyCodeExpired):
+		ginutil.RespondError(c, response.CodeBadRequest, "error.verify_code_expired", nil)
+	case errors.Is(err, ErrVerifyCodeAttemptsExceeded):
+		ginutil.RespondError(c, response.CodeBadRequest, "error.verify_code_attempts_exceeded", nil)
+	case errors.Is(err, ErrAgreementRequired):
+		ginutil.RespondError(c, response.CodeBadRequest, "error.agreement_required", nil)
+	case errors.Is(err, ErrWeakPassword):
+		respondWeakPassword(c, err)
+	default:
+		ginutil.RespondError(c, response.CodeInternal, "error.register_failed", err)
+	}
 }
 
 var (

@@ -1748,5 +1748,25 @@
     "label": "购买身份",
     "member": "会员购买",
     "guest": "游客可购"
+  },
+  "purchaseAccount": {
+    "title": "本站账号",
+    "hint": "新邮箱自动注册，已有账号请输入本站密码。",
+    "loginOnly": "请输入邮箱和本站密码。",
+    "email": "邮箱",
+    "password": "密码",
+    "emailPlaceholder": "你的邮箱",
+    "passwordPlaceholder": "设置 / 输入密码",
+    "completeRegistration": "首次使用该邮箱，请同意服务条款并完成以下验证。",
+    "inviteCode": "邀请码",
+    "emailCode": "邮箱验证码",
+    "sendCode": "发送验证码",
+    "recoveryCode": "两步验证恢复码",
+    "totpCode": "两步验证码",
+    "useTotp": "使用验证器",
+    "useRecovery": "使用恢复码",
+    "back": "返回账号密码",
+    "processing": "验证中…",
+    "continue": "验证并继续购买"
   }
 }

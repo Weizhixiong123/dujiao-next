@@ -285,13 +285,7 @@
 
           <!-- Actions (sticky bottom) -->
           <div class="shrink-0 px-4 md:px-5 pt-3 pb-3 md:pb-5 border-t theme-safe-bottom">
-            <Button
-              v-if="requiresLogin"
-              class="w-full py-3 h-auto min-h-[44px] rounded-xl text-sm font-semibold"
-              @click="goLogin"
-            >
-              {{ t('quickBuy.loginToBuy') }}
-            </Button>
+            <PurchaseAccountForm v-if="requiresLogin" class="max-h-[60vh] overflow-y-auto" :disabled="!canPurchase" @authenticated="handleBuyNow" />
             <div v-else-if="isSoldOut(product)" class="flex gap-3">
               <Button
                 variant="secondary"
@@ -328,8 +322,9 @@
 
 
 <script setup lang="ts">
+import PurchaseAccountForm from './product/PurchaseAccountForm.vue'
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '../stores/app'
 import { useCartStore } from '../stores/cart'
@@ -355,7 +350,6 @@ const emit = defineEmits<{
 }>()
 
 const router = useRouter()
-const route = useRoute()
 const { t } = useI18n()
 const appStore = useAppStore()
 const cartStore = useCartStore()
@@ -841,10 +835,7 @@ const handleBuyNow = () => {
   router.push('/checkout?mode=buynow')
 }
 
-const goLogin = () => {
-  close()
-  router.push(`/auth/login?redirect=${encodeURIComponent(route.fullPath)}`)
-}
+
 
 const goToDetail = () => {
   close()

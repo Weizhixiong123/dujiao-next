@@ -171,7 +171,7 @@
 
           <!-- 操作 -->
           <div ref="purchaseActionsRef" class="mt-[18px] flex flex-wrap gap-3">
-            <Button v-if="requiresLogin" class="h-12 w-full rounded-full text-[17px] font-bold" @click="goLogin">{{ t('productDetail.loginToBuy') }}</Button>
+            <PurchaseAccountForm v-if="requiresLogin" class="w-full" :disabled="!canPurchase" @authenticated="buyNow" />
             <template v-else>
               <Button class="h-12 flex-1 rounded-full text-[17px] font-bold" :disabled="!canPurchase" @click="buyNow"><Zap /> {{ t('productDetail.buyNow') }}</Button>
               <Button variant="outline" class="h-12 rounded-full text-[17px] font-bold" :disabled="!canPurchase" @click="addToCart"><ShoppingCart /> {{ t('productDetail.addToCart') }}</Button>
@@ -246,6 +246,7 @@
 </template>
 
 <script setup lang="ts">
+import PurchaseAccountForm from '../../components/product/PurchaseAccountForm.vue'
 import { computed, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
