@@ -1,4 +1,10 @@
 {
+  "shopContact": {
+    "title": "Contact the shop owner",
+    "scan": "Scan with WeChat to get in touch",
+    "qrCode": "Shop owner’s WeChat QR code",
+    "unavailable": "The QR code could not be loaded"
+  },
   "common": {
     "siteName": "GPT 速充",
     "loading": "Loading...",

@@ -1,11 +1,12 @@
 package settingsapp
 
 import (
-	settingsvalue "github.com/dujiao-next/internal/modules/settings/schema/value"
+	"path"
 	"regexp"
 	"strings"
 
 	"github.com/dujiao-next/internal/constants"
+	settingsvalue "github.com/dujiao-next/internal/modules/settings/schema/value"
 	"github.com/dujiao-next/internal/shared/contactlink"
 	"github.com/dujiao-next/internal/shared/jsonmap"
 )
@@ -128,8 +129,9 @@ func normalizeSiteFooterLinks(raw interface{}) []interface{} {
 
 func normalizeSiteContact(raw interface{}) map[string]interface{} {
 	result := map[string]interface{}{
-		"telegram": "",
-		"whatsapp": "",
+		"telegram":       "",
+		"whatsapp":       "",
+		"wechat_qr_code": "",
 	}
 	contactMap, ok := raw.(map[string]interface{})
 	if !ok {
@@ -137,6 +139,7 @@ func normalizeSiteContact(raw interface{}) map[string]interface{} {
 	}
 	result["telegram"] = normalizeSettingText(contactMap["telegram"])
 	result["whatsapp"] = normalizeSettingText(contactMap["whatsapp"])
+	result["wechat_qr_code"] = normalizeSettingText(contactMap["wechat_qr_code"])
 	return result
 }
 
@@ -157,6 +160,11 @@ func validateSiteSetting(value jsonmap.JSON) error {
 	}
 	if whatsApp, _ := contact["whatsapp"].(string); whatsApp != "" && !contactlink.IsWhatsApp(whatsApp) {
 		return &SettingFieldError{Field: "contact_whatsapp"}
+	}
+	if qrCode, _ := contact["wechat_qr_code"].(string); qrCode != "" {
+		if !strings.HasPrefix(qrCode, "/uploads/") || path.Clean(qrCode) != qrCode || strings.ContainsAny(qrCode, "\\%?#") {
+			return &SettingFieldError{Field: "contact_wechat_qr_code"}
+		}
 	}
 	return nil
 }

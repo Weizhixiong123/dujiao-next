@@ -26,7 +26,14 @@
           </ErrorBoundary>
         </main>
         <Footer v-if="!isResellerConsole" />
-        <BackToTop v-if="!isResellerConsole" />
+        <div v-if="!isResellerConsole"
+          class="pointer-events-none fixed right-4 z-40 flex flex-col items-end gap-2 md:right-6 lg:bottom-6"
+          :class="route.name === 'product-detail'
+            ? 'bottom-[calc(8.75rem+env(safe-area-inset-bottom,0px))]'
+            : 'bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))]'">
+          <BackToTop />
+          <ShopContact />
+        </div>
         <MobileBottomNav v-if="!isResellerConsole" />
       </template>
     </template>
@@ -49,6 +56,7 @@ import Toast from './components/Toast.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import ErrorBoundary from './components/ErrorBoundary.vue'
 import BackToTop from './components/BackToTop.vue'
+import ShopContact from './components/ShopContact.vue'
 import MobileBottomNav from './components/MobileBottomNav.vue'
 
 // vault 外壳按需加载，classic 用户不会拉取其 chunk/样式

@@ -3154,6 +3154,8 @@ const messages = {
           telegramPlaceholder: 'https://telegram.me/...',
           whatsapp: 'WhatsApp 链接',
           whatsappPlaceholder: 'https://wa.me/...',
+          wechatQrCode: '微信二维码',
+          wechatQrCodeHint: '上传店主的微信二维码并保存，商城右下角即会显示联系店主按钮。',
         },
         footerLinks: {
           title: '页脚自定义链接',
@@ -7758,6 +7760,8 @@ const messages = {
           telegramPlaceholder: 'https://telegram.me/...',
           whatsapp: 'WhatsApp 連結',
           whatsappPlaceholder: 'https://wa.me/...',
+          wechatQrCode: '微信 QR Code',
+          wechatQrCodeHint: '上傳店主的微信 QR Code 並儲存，商城右下角即會顯示聯絡店主按鈕。',
         },
         footerLinks: {
           title: '頁尾自訂連結',
@@ -12362,6 +12366,8 @@ const messages = {
           telegramPlaceholder: 'https://telegram.me/...',
           whatsapp: 'WhatsApp',
           whatsappPlaceholder: 'https://wa.me/...',
+          wechatQrCode: 'WeChat QR code',
+          wechatQrCodeHint: 'Upload and save the owner’s WeChat QR code to show a contact button in the storefront.',
         },
         footerLinks: {
           title: 'Custom Footer Links',

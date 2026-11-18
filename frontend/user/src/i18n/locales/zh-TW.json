@@ -1,4 +1,10 @@
 {
+  "shopContact": {
+    "title": "聯絡店主",
+    "scan": "使用微信掃描 QR Code 聯絡",
+    "qrCode": "店主微信 QR Code",
+    "unavailable": "QR Code 暫時無法載入"
+  },
   "common": {
     "siteName": "GPT 速充",
     "loading": "載入中...",

@@ -1,4 +1,10 @@
 {
+  "shopContact": {
+    "title": "联系店主",
+    "scan": "使用微信扫码联系",
+    "qrCode": "店主微信二维码",
+    "unavailable": "二维码暂时无法加载"
+  },
   "common": {
     "siteName": "GPT 速充",
     "loading": "加载中...",

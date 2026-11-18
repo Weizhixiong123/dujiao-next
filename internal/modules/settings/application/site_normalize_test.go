@@ -723,6 +723,8 @@ func TestUpdateSiteSettingValidatesContactLinks(t *testing.T) {
 	}{
 		{map[string]interface{}{"whatsapp": "https://example.com/logo.png"}, "contact_whatsapp"},
 		{map[string]interface{}{"telegram": "javascript:alert(1)"}, "contact_telegram"},
+		{map[string]interface{}{"wechat_qr_code": "https://example.com/qr.png"}, "contact_wechat_qr_code"},
+		{map[string]interface{}{"wechat_qr_code": "/uploads/../qr.png"}, "contact_wechat_qr_code"},
 	}
 	for _, tc := range cases {
 		_, err := svc.Update(constants.SettingKeySiteConfig, map[string]interface{}{"contact": tc.contact})
@@ -735,10 +737,28 @@ func TestUpdateSiteSettingValidatesContactLinks(t *testing.T) {
 		t.Fatalf("invalid site config must not be persisted")
 	}
 
+	const image = "/uploads/common/2026/11/shop-qr.png"
 	if _, err := svc.Update(constants.SettingKeySiteConfig, map[string]interface{}{
-		"contact": map[string]interface{}{"telegram": "https://t.me/shop", "whatsapp": "https://wa.me/1234567890"},
+		"contact": map[string]interface{}{"telegram": "https://t.me/shop", "whatsapp": "https://wa.me/1234567890", "wechat_qr_code": " " + image + " "},
 	}); err != nil {
 		t.Fatalf("valid contact links rejected: %v", err)
+	}
+	config, err := svc.GetConfig(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := config["contact"].(map[string]interface{})["wechat_qr_code"]; got != image {
+		t.Fatalf("unexpected public WeChat QR code: %v", got)
+	}
+	if _, err := svc.Update(constants.SettingKeySiteConfig, map[string]interface{}{"contact": map[string]interface{}{"wechat_qr_code": ""}}); err != nil {
+		t.Fatalf("clear QR code: %v", err)
+	}
+	config, err = svc.GetConfig(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := config["contact"].(map[string]interface{})["wechat_qr_code"]; got != "" {
+		t.Fatalf("unexpected public WeChat QR code after clearing: %v", got)
 	}
 	if _, err := svc.Update(constants.SettingKeySiteConfig, map[string]interface{}{"contact": map[string]interface{}{}}); err != nil {
 		t.Fatalf("empty contact links rejected: %v", err)
