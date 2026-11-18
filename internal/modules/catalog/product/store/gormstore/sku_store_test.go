@@ -28,6 +28,25 @@ func setupSKUStoreTest(t *testing.T) (*SKUStore, *gorm.DB) {
 	return NewSKUStore(db), db
 }
 
+func TestSKUStorePreservesInactiveSKUOnCreateAndPriceSync(t *testing.T) {
+	repo, _ := setupSKUStoreTest(t)
+	item := &productdomain.ProductSKU{ProductID: 1, SKUCode: "OFF"}
+	if err := repo.Create(item); err != nil {
+		t.Fatal(err)
+	}
+	if item.ID == 0 || item.IsActive {
+		t.Fatalf("unexpected created SKU id=%d active=%t", item.ID, item.IsActive)
+	}
+	price := money.FromDecimal(decimal.NewFromInt(100))
+	if err := repo.UpdateFields(item.ID, map[string]interface{}{"price_amount": price}); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := repo.GetByID(item.ID)
+	if err != nil || saved == nil || saved.IsActive || !saved.PriceAmount.Equal(price.Decimal) {
+		t.Fatalf("inactive SKU was not preserved after price sync: %v, %v", saved, err)
+	}
+}
+
 func TestSKUStoreListByProductSortOrderDescending(t *testing.T) {
 	repo, _ := setupSKUStoreTest(t)
 

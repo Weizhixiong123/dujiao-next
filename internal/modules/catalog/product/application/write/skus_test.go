@@ -17,6 +17,19 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+func TestNormalizeSKUUpdatePreservesOmittedInactiveStatus(t *testing.T) {
+	service := NewWriteService(Options{})
+	price := decimal.NewFromInt(10)
+	existing := map[uint]productdomain.ProductSKU{1: {ID: 1, SKUCode: "OFF", IsActive: false}}
+	rows, _, _, err := service.normalizeProductSKUInputs([]ProductSKUInput{
+		{ID: 1, SKUCode: "OFF", PriceAmount: price},
+		{SKUCode: "NEW", PriceAmount: price},
+	}, constants.FulfillmentTypeUpstream, existing)
+	if err != nil || len(rows) != 2 || rows[0].IsActive || !rows[1].IsActive {
+		t.Fatalf("expected the existing SKU disabled and the new SKU enabled, got %v, %v", rows, err)
+	}
+}
+
 func TestSyncSingleProductSKUMultipleRowsKeepsSingleActive(t *testing.T) {
 	service := NewWriteService(Options{})
 	repo := newSyncSingleSKURepo(t)

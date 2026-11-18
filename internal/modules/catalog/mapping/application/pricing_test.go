@@ -152,13 +152,12 @@ type markupReapplySKUs struct {
 	update []uint
 }
 
-func (m *markupReapplySKUs) GetByID(id uint) (*productdomain.ProductSKU, error) {
-	return m.items[id], nil
-}
-
-func (m *markupReapplySKUs) Update(item *productdomain.ProductSKU) error {
-	m.update = append(m.update, item.ID)
-	m.items[item.ID] = item
+func (m *markupReapplySKUs) UpdateFields(id uint, fields map[string]interface{}) error {
+	if item := m.items[id]; item != nil {
+		m.update = append(m.update, id)
+		item.PriceAmount = fields["price_amount"].(money.Amount)
+		item.CostPriceAmount = fields["cost_price_amount"].(money.Amount)
+	}
 	return nil
 }
 

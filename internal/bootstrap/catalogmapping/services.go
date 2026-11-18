@@ -23,7 +23,7 @@ type ProductStore interface {
 
 // SKUStore 是映射服务装配所需的 SKU 持久化与事务绑定能力。
 type SKUStore interface {
-	productcontract.SKURepository
+	mappingcontract.SKURepository
 	BindTx(tx *gorm.DB) productcontract.SKURepository
 }
 

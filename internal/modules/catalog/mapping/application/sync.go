@@ -44,6 +44,10 @@ func (s *Service) SyncProduct(mappingID uint) error {
 		return siteconnectioncontract.ErrNotFound
 	}
 
+	if conn.Status == constants.ConnectionStatusDisabled {
+		return siteconnectioncontract.ErrInvalid
+	}
+
 	adapter, err := s.connections.GetAdapter(conn)
 	if err != nil {
 		return err
@@ -151,18 +155,12 @@ func (s *Service) SyncProduct(mappingID uint) error {
 	for i := range skuMappings {
 		upSKU, ok := upstreamSKUMap[skuMappings[i].UpstreamSKUID]
 		if !ok {
-			// 上游 SKU 已删除 → 停用本地 SKU 和映射
+			// 上游缺少该 SKU：只更新映射可用性，保留本地启用开关。
 			skuMappings[i].UpstreamIsActive = false
 			skuMappings[i].UpstreamStock = 0
 			skuMappings[i].StockSyncedAt = &now
 			_ = s.skuMappings.Update(&skuMappings[i])
 
-			// 停用本地 SKU
-			localSKU, _ := s.skus.GetByID(skuMappings[i].LocalSKUID)
-			if localSKU != nil && localSKU.IsActive {
-				localSKU.IsActive = false
-				_ = s.skus.Update(localSKU)
-			}
 			continue
 		}
 
@@ -176,19 +174,13 @@ func (s *Service) SyncProduct(mappingID uint) error {
 		_ = s.skuMappings.Update(&skuMappings[i])
 
 		// 同步本地 SKU 字段
-		localSKU, _ := s.skus.GetByID(skuMappings[i].LocalSKUID)
-		if localSKU != nil {
-			localSKU.SpecValuesJSON = upSKU.SpecValues
-			localSKU.IsActive = upSKU.IsActive
-			// 如果启用了自动同步价格，按加价比例更新本地售价和成本价。
-			// 分类树拿不到时跳过改价，避免按默认加价把售价改低。
-			if conn.AutoSyncPrice && markupReady {
-				newLocalPrice := CalculateLocalPrice(upPrice, conn.ExchangeRate, markupPercent, conn.PriceRoundingMode)
-				localSKU.PriceAmount = money.FromDecimal(newLocalPrice.Round(2))
-				localSKU.CostPriceAmount = money.FromDecimal(convertCurrency(upPrice, conn.ExchangeRate).Round(2))
-			}
-			_ = s.skus.Update(localSKU)
+		fields := map[string]interface{}{"spec_values_json": upSKU.SpecValues}
+		if conn.AutoSyncPrice && markupReady {
+			newLocalPrice := CalculateLocalPrice(upPrice, conn.ExchangeRate, markupPercent, conn.PriceRoundingMode)
+			fields["price_amount"] = money.FromDecimal(newLocalPrice.Round(2))
+			fields["cost_price_amount"] = money.FromDecimal(convertCurrency(upPrice, conn.ExchangeRate).Round(2))
 		}
+		_ = s.skus.UpdateFields(skuMappings[i].LocalSKUID, fields)
 	}
 
 	// 2b. 上游新增的 SKU → 创建本地 SKU + 映射
@@ -296,7 +288,6 @@ func (s *Service) syncUpstreamWholesalePrices(mapping *mappingdomain.Mapping, lo
 // status: mappingdomain.UpstreamStatusInactive(下架) / mappingdomain.UpstreamStatusDeleted(已删除)
 //   - 本地 Product 下架（IsActive=false），不删除
 //   - 所有 SKUMapping 标记为 UpstreamIsActive=false, UpstreamStock=0
-//   - 所有本地 SKU 下架
 //   - mapping.UpstreamStatus 写入对应状态
 //   - status==deleted 时同时停用映射（IsActive=false），避免后续白白调上游
 func (s *Service) markUpstreamUnavailable(mapping *mappingdomain.Mapping, status string, now time.Time) error {
@@ -307,19 +298,12 @@ func (s *Service) markUpstreamUnavailable(mapping *mappingdomain.Mapping, status
 		_ = s.products.Update(localProduct)
 	}
 
-	// SKU 映射 + 本地 SKU 下架
 	skuMappings, _ := s.skuMappings.ListByProductMapping(mapping.ID)
 	for i := range skuMappings {
 		skuMappings[i].UpstreamIsActive = false
 		skuMappings[i].UpstreamStock = 0
 		skuMappings[i].StockSyncedAt = &now
 		_ = s.skuMappings.Update(&skuMappings[i])
-
-		localSKU, _ := s.skus.GetByID(skuMappings[i].LocalSKUID)
-		if localSKU != nil && localSKU.IsActive {
-			localSKU.IsActive = false
-			_ = s.skus.Update(localSKU)
-		}
 	}
 
 	mapping.UpstreamStatus = status
@@ -406,18 +390,10 @@ func (s *Service) SyncAllStock(cfg settingsintegration.UpstreamSyncConfig) error
 //     · 同步失败 → 返回 nil（容忍上游抖动，让缓存继续兜底）
 //     · 同步后仍 < requiredQty → 返回 mappingcontract.ErrUpstreamStockInsufficient
 //
-// 后台 "pre_order_stock_check_enabled" 关闭时整个方法直接返回 nil。
+// 后台关闭库存实时检查时，仍拒绝已明确下架的上游 SKU。
 func (s *Service) EnsureUpstreamStockForOrder(localSKUID uint, requiredQty int) error {
 	if s == nil || s.skuMappings == nil || localSKUID == 0 || requiredQty <= 0 {
 		return nil
-	}
-
-	// 后台总开关
-	if s.settings != nil {
-		cfg, err := s.settings.GetUpstreamSyncConfig("")
-		if err == nil && !cfg.PreOrderStockCheckEnabled {
-			return nil
-		}
 	}
 
 	skuMapping, err := s.skuMappings.GetByLocalSKUID(localSKUID)
@@ -430,6 +406,18 @@ func (s *Service) EnsureUpstreamStockForOrder(localSKUID uint, requiredQty int) 
 		// 没有上游映射 = 非上游商品
 		return nil
 	}
+	if !skuMapping.UpstreamIsActive {
+		return mappingcontract.ErrUpstreamStockInsufficient
+	}
+
+	// 后台总开关
+	if s.settings != nil {
+		cfg, err := s.settings.GetUpstreamSyncConfig("")
+		if err == nil && !cfg.PreOrderStockCheckEnabled {
+			return nil
+		}
+	}
+
 	if skuMapping.UpstreamStock < 0 {
 		// 无限库存
 		return nil
@@ -456,6 +444,9 @@ func (s *Service) EnsureUpstreamStockForOrder(localSKUID uint, requiredQty int) 
 	if err != nil || refreshed == nil {
 		logger.Warnw("preorder_stock_check_refresh_failed", "local_sku_id", localSKUID, "error", err)
 		return nil
+	}
+	if !refreshed.UpstreamIsActive {
+		return mappingcontract.ErrUpstreamStockInsufficient
 	}
 	if refreshed.UpstreamStock < 0 || refreshed.UpstreamStock >= requiredQty {
 		return nil
@@ -494,6 +485,10 @@ func (s *Service) SyncConnectionStock(connectionID uint, connMappings []mappingd
 	conn, err := s.connections.GetByID(connectionID)
 	if err != nil || conn == nil {
 		return fmt.Errorf("get connection %d: %w", connectionID, err)
+	}
+
+	if conn.Status == constants.ConnectionStatusDisabled {
+		return nil
 	}
 
 	adapter, err := s.connections.GetAdapter(conn)
@@ -711,11 +706,6 @@ func (s *Service) syncProductFromData(mapping *mappingdomain.Mapping, conn *site
 			skuMappings[i].UpstreamStock = 0
 			skuMappings[i].StockSyncedAt = now
 			_ = s.skuMappings.Update(&skuMappings[i])
-			localSKU, _ := s.skus.GetByID(skuMappings[i].LocalSKUID)
-			if localSKU != nil && localSKU.IsActive {
-				localSKU.IsActive = false
-				_ = s.skus.Update(localSKU)
-			}
 			continue
 		}
 
@@ -739,17 +729,13 @@ func (s *Service) syncProductFromData(mapping *mappingdomain.Mapping, conn *site
 		skuMappings[i].UpstreamStock = upSKU.StockQuantity
 		_ = s.skuMappings.Update(&skuMappings[i])
 
-		localSKU, _ := s.skus.GetByID(skuMappings[i].LocalSKUID)
-		if localSKU != nil {
-			localSKU.SpecValuesJSON = upSKU.SpecValues
-			localSKU.IsActive = upSKU.IsActive
-			if conn.AutoSyncPrice && applyPrice {
-				newLocalPrice := CalculateLocalPrice(upPrice, conn.ExchangeRate, markupPercent, conn.PriceRoundingMode)
-				localSKU.PriceAmount = money.FromDecimal(newLocalPrice.Round(2))
-				localSKU.CostPriceAmount = money.FromDecimal(convertCurrency(upPrice, conn.ExchangeRate).Round(2))
-			}
-			_ = s.skus.Update(localSKU)
+		fields := map[string]interface{}{"spec_values_json": upSKU.SpecValues}
+		if conn.AutoSyncPrice && applyPrice {
+			newLocalPrice := CalculateLocalPrice(upPrice, conn.ExchangeRate, markupPercent, conn.PriceRoundingMode)
+			fields["price_amount"] = money.FromDecimal(newLocalPrice.Round(2))
+			fields["cost_price_amount"] = money.FromDecimal(convertCurrency(upPrice, conn.ExchangeRate).Round(2))
 		}
+		_ = s.skus.UpdateFields(skuMappings[i].LocalSKUID, fields)
 	}
 
 	// 上游新增 SKU。这一轮不能安全算价时先不建：上游价已变，按错误的加价建出来

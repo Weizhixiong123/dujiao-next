@@ -100,7 +100,17 @@ func (r *SKUStore) Create(item *productdomain.ProductSKU) error {
 	if item == nil {
 		return errors.New("sku is nil")
 	}
-	return r.db.Create(item).Error
+	if item.IsActive {
+		return r.db.Create(item).Error
+	}
+	// GORM replaces false with the schema default when inserting a struct.
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(item).Error; err != nil {
+			return err
+		}
+		item.IsActive = false
+		return tx.Model(item).UpdateColumn("is_active", false).Error
+	})
 }
 
 // CreateBatch 批量创建 SKU
@@ -117,6 +127,12 @@ func (r *SKUStore) Update(item *productdomain.ProductSKU) error {
 		return errors.New("sku is nil")
 	}
 	return r.db.Save(item).Error
+}
+
+func (r *SKUStore) UpdateFields(id uint, fields map[string]interface{}) error {
+	return r.db.Model(&productdomain.ProductSKU{}).
+		Where("id = ? AND deleted_at IS NULL", id).
+		Updates(fields).Error
 }
 
 // Delete 硬删除单个 SKU（绕过软删除，避免唯一索引冲突）

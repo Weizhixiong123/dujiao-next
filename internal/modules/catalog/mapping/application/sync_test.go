@@ -6,13 +6,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dujiao-next/internal/constants"
 	mappingcontract "github.com/dujiao-next/internal/modules/catalog/mapping/contract"
 	mappingdomain "github.com/dujiao-next/internal/modules/catalog/mapping/domain"
 	productdomain "github.com/dujiao-next/internal/modules/catalog/product/domain"
 	settingsintegration "github.com/dujiao-next/internal/modules/settings/schema/integration"
 	siteconnectiondomain "github.com/dujiao-next/internal/modules/siteconnection/domain"
 	"github.com/dujiao-next/internal/shared/jsonmap"
-	"github.com/dujiao-next/internal/shared/money"
 	"github.com/dujiao-next/internal/upstream"
 
 	"github.com/shopspring/decimal"
@@ -105,17 +105,12 @@ func (r staticMappingRepo) Update(_ *mappingdomain.Mapping) error {
 // recordingSKURepo 记录被写回的 SKU，用来断言价格没被动过。
 type recordingSKURepo struct {
 	mappingcontract.SKURepository
-	updates []*productdomain.ProductSKU
+	updates []map[string]interface{}
 }
 
-func (r *recordingSKURepo) Update(item *productdomain.ProductSKU) error {
-	copied := *item
-	r.updates = append(r.updates, &copied)
+func (r *recordingSKURepo) UpdateFields(_ uint, fields map[string]interface{}) error {
+	r.updates = append(r.updates, fields)
 	return nil
-}
-
-func (r *recordingSKURepo) GetByID(_ uint) (*productdomain.ProductSKU, error) {
-	return &productdomain.ProductSKU{ID: 1, PriceAmount: money.FromDecimal(decimal.NewFromInt(100))}, nil
 }
 
 // 分类接口报错时，已启用自动同步价格的商品售价必须保持不变。
@@ -261,21 +256,65 @@ func (r *creatingSKURepo) Create(item *productdomain.ProductSKU) error {
 	return nil
 }
 
-func (r *creatingSKURepo) GetByID(_ uint) (*productdomain.ProductSKU, error) {
-	return nil, nil
-}
-
 // recordingSKUMappingRepo 接受新映射写入，不关心内容。
 type recordingSKUMappingRepo struct {
 	mappingcontract.SKUMappingRepository
+	rows []mappingdomain.SKUMapping
 }
 
 func (r *recordingSKUMappingRepo) ListByProductMapping(_ uint) ([]mappingdomain.SKUMapping, error) {
-	return nil, nil
+	return r.rows, nil
+}
+
+func (r *recordingSKUMappingRepo) Update(row *mappingdomain.SKUMapping) error {
+	for i := range r.rows {
+		if r.rows[i].ID == row.ID {
+			r.rows[i] = *row
+		}
+	}
+	return nil
 }
 
 func (r *recordingSKUMappingRepo) Create(_ *mappingdomain.SKUMapping) error {
 	return nil
+}
+
+func TestSKUAvailabilitySyncDoesNotChangeLocalStatus(t *testing.T) {
+	mapping := &mappingdomain.Mapping{ID: 1, ConnectionID: 2, LocalProductID: 10, UpstreamProductID: 20}
+	conn := &siteconnectiondomain.Connection{ID: 2, Status: constants.ConnectionStatusActive}
+	product := &upstream.UpstreamProduct{ID: 20, IsActive: true, SKUs: []upstream.UpstreamSKU{
+		{ID: 30, IsActive: true, PriceAmount: "12", StockQuantity: 5},
+	}}
+	skus := &recordingSKURepo{}
+	mapped := &recordingSKUMappingRepo{rows: []mappingdomain.SKUMapping{{ID: 1, LocalSKUID: 40, UpstreamSKUID: 30}}}
+	svc := &Service{
+		mappings:    staticMappingRepo{mapping: mapping},
+		connections: staticConnectionProvider{conn: conn, adapter: failingCategoryAdapter{product: product}},
+		products:    staticProductRepo{}, skus: skus, skuMappings: mapped,
+	}
+	if err := svc.SyncProduct(1); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	svc.syncProductFromData(mapping, conn, product, &now, nil, true)
+	if len(skus.updates) != 2 || !mapped.rows[0].UpstreamIsActive || mapped.rows[0].UpstreamStock != 5 {
+		t.Fatal("both sync paths should refresh SKU metadata and upstream availability")
+	}
+	for _, fields := range skus.updates {
+		if _, includesLocalStatus := fields["is_active"]; includesLocalStatus {
+			t.Fatal("supplier sync overwrote the local SKU toggle")
+		}
+	}
+	conn.Status = constants.ConnectionStatusDisabled
+	if err := svc.SyncProduct(1); err == nil {
+		t.Fatal("single sync should reject a disabled connection")
+	}
+	if err := svc.SyncConnectionStock(conn.ID, []mappingdomain.Mapping{*mapping}, 10, 1); err != nil {
+		t.Fatal(err)
+	}
+	if len(skus.updates) != 2 {
+		t.Fatal("a disabled connection wrote local SKU fields")
+	}
 }
 
 // staticProductRepo 返回一个固定的本地商品，供 SyncProduct 走完商品同步阶段。

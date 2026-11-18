@@ -55,10 +55,9 @@ type ProductRepository interface {
 
 // SKURepository 是映射上下文所需的最小本地 SKU 端口。
 type SKURepository interface {
-	GetByID(id uint) (*productdomain.ProductSKU, error)
 	ListByProduct(productID uint, onlyActive bool) ([]productdomain.ProductSKU, error)
 	Create(item *productdomain.ProductSKU) error
-	Update(item *productdomain.ProductSKU) error
+	UpdateFields(id uint, fields map[string]interface{}) error
 }
 
 // CategoryRepository 是映射上下文所需的分类端口。

@@ -151,6 +151,10 @@ func (s *WriteService) normalizeProductSKUInputs(inputs []ProductSKUInput, fulfi
 		return nil, decimal.Zero, 0, productcontract.ErrProductSKUInvalid
 	}
 	seenCode := make(map[string]struct{}, len(inputs))
+	existingByCode := make(map[string]productdomain.ProductSKU, len(existingSKUMap))
+	for _, sku := range existingSKUMap {
+		existingByCode[strings.ToLower(strings.TrimSpace(sku.SKUCode))] = sku
+	}
 	normalized := make([]normalizedProductSKU, 0, len(inputs))
 	hasActive := false
 	minActivePrice := decimal.Zero
@@ -184,6 +188,8 @@ func (s *WriteService) normalizeProductSKUInputs(inputs []ProductSKUInput, fulfi
 			if !hasExisting {
 				return nil, decimal.Zero, 0, productcontract.ErrProductSKUInvalid
 			}
+		} else if input.ID == 0 {
+			existing, hasExisting = existingByCode[codeKey]
 		}
 		keepManualStock := input.ManualStockTotal == nil && fulfillmentType == constants.FulfillmentTypeManual
 		manualTotal := 0
@@ -200,6 +206,9 @@ func (s *WriteService) normalizeProductSKUInputs(inputs []ProductSKUInput, fulfi
 		}
 
 		isActive := true
+		if hasExisting {
+			isActive = existing.IsActive
+		}
 		if input.IsActive != nil {
 			isActive = *input.IsActive
 		}
