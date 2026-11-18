@@ -293,42 +293,6 @@
         </div>
       </div>
     </section>
-
-    <template v-if="latestSectionVisible">
-    <hr class="theme-section-divider mx-4 md:mx-auto md:max-w-6xl" />
-
-    <section class="relative z-10 py-12">
-      <div class="container mx-auto px-4">
-        <div class="mb-6 flex items-end justify-between gap-4">
-          <div>
-            <h2 class="theme-section-heading text-[1.7rem]">{{ t('home.latest.title') }}</h2>
-            <p class="mt-1 text-sm text-muted-foreground">{{ t('home.latest.description') }}</p>
-          </div>
-          <div class="flex items-center gap-3 text-sm">
-            <router-link v-if="blogEnabled" to="/blog" class="text-muted-foreground transition-colors hover:text-foreground">{{ t('nav.blog') }}</router-link>
-            <router-link v-if="noticeEnabled" to="/notice" class="text-muted-foreground transition-colors hover:text-foreground">{{ t('nav.notice') }}</router-link>
-          </div>
-        </div>
-
-        <div v-if="posts.length > 0" class="grid grid-cols-1 gap-5 md:grid-cols-3">
-          <article
-            v-for="post in posts"
-            :key="post.id"
-            class="cursor-pointer rounded-xl border bg-card p-5 shadow-sm transition hover:shadow-md"
-            @click="goToPost(post.slug)"
-          >
-            <div class="mb-2 text-xs text-muted-foreground">{{ formatDate(post.published_at) }}</div>
-            <h3 class="line-clamp-2 text-base font-semibold">{{ getLocalizedText(post.title) }}</h3>
-            <p class="mt-2 line-clamp-2 text-sm text-muted-foreground">{{ getLocalizedText(post.summary) }}</p>
-            <div class="mt-4 text-sm font-medium text-primary">{{ t('blog.readMore') }}</div>
-          </article>
-        </div>
-        <div v-else class="rounded-2xl border border-dashed py-12 text-center text-muted-foreground">
-          {{ t('blog.empty') }}
-        </div>
-      </div>
-    </section>
-    </template>
     </template>
 
     <ProductQuickBuy
@@ -352,7 +316,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ArrowRight, ChevronLeft, ChevronRight, PackageOpen, Search, X } from 'lucide-vue-next'
-import { postAPI, productAPI } from '../api'
+import { productAPI } from '../api'
 import { getImageUrl } from '../utils/image'
 import { useLocalized } from '../composables/useProduct'
 import { useBannerCarousel } from '../composables/useBannerCarousel'
@@ -378,14 +342,8 @@ const appStore = useAppStore()
 const heroBadgeClass = 'inline-flex items-center gap-2 rounded-md border border-white/25 bg-black/55 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-white backdrop-blur-sm'
 
 const templateMode = computed(() => appStore.config?.template_mode || 'card')
-const navBuiltin = computed(() => (appStore.config?.nav_config as { builtin?: Record<string, boolean> } | undefined)?.builtin)
-const blogEnabled = computed(() => navBuiltin.value?.blog !== false)
-const noticeEnabled = computed(() => navBuiltin.value?.notice !== false)
-const latestSectionVisible = computed(() => blogEnabled.value || noticeEnabled.value)
-
 // ==================== Shared State ====================
 const products = ref<any[]>([])
-const posts = ref<any[]>([])
 const quickBuyProduct = ref<any>(null)
 const quickBuyVisible = ref(false)
 
@@ -463,17 +421,8 @@ usePageSeo({
 })
 
 // ==================== Card Mode ====================
-const formatDate = (dateString: string) => {
-  if (!dateString) return ''
-  return new Date(dateString).toLocaleDateString()
-}
-
 const goToProduct = (slug: string) => {
   router.push(`/products/${slug}`)
-}
-
-const goToPost = (slug: string) => {
-  router.push(`/blog/${slug}`)
 }
 
 const loadFeaturedProducts = async () => {
@@ -482,19 +431,6 @@ const loadFeaturedProducts = async () => {
     products.value = response.data.data || []
   } catch (error) {
     console.error('Failed to load products:', error)
-  }
-}
-
-const loadLatestPosts = async () => {
-  if (!latestSectionVisible.value) return
-  try {
-    const params: Record<string, unknown> = { page: 1, page_size: 3 }
-    if (blogEnabled.value && !noticeEnabled.value) params.type = 'blog'
-    if (!blogEnabled.value && noticeEnabled.value) params.type = 'notice'
-    const response = await postAPI.list(params)
-    posts.value = response.data.data || []
-  } catch (error) {
-    console.error('Failed to load posts:', error)
   }
 }
 
@@ -512,7 +448,7 @@ onMounted(async () => {
   if (templateMode.value === 'list') {
     await Promise.all([loadBanners(), listInitialize()])
   } else {
-    await Promise.all([loadBanners(), loadFeaturedProducts(), loadLatestPosts()])
+    await Promise.all([loadBanners(), loadFeaturedProducts()])
   }
   showAnnouncementIfNeeded()
 })

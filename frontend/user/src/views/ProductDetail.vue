@@ -45,7 +45,7 @@
         <!-- Main Info Card -->
         <div
           class="bg-card backdrop-blur-xl border rounded-3xl overflow-hidden mb-8 shadow-2xl">
-          <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] gap-0">
+          <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
             <!-- Product Images (Left) -->
             <ProductImageGallery
               :images="images"
@@ -55,13 +55,13 @@
             />
 
             <!-- Product Info (Right) -->
-            <div class="p-6 md:p-8 lg:p-10 lg:pb-8 flex flex-col">
-              <div class="mb-6">
-                <div v-if="categoryName" class="mb-3 text-xs uppercase tracking-wider text-muted-foreground">
+            <div class="p-5 md:p-8 lg:p-10 min-w-0">
+              <div class="flex flex-col gap-5">
+                <div v-if="categoryName" class="text-xs uppercase tracking-wider text-muted-foreground">
                   {{ t('productDetail.categoryLabel') }} · {{ categoryName }}
                 </div>
 
-                <div v-if="product.tags && product.tags.length > 0" class="mb-4 flex flex-wrap gap-2">
+                <div v-if="product.tags && product.tags.length > 0" class="flex flex-wrap gap-2">
                   <Badge
                     v-for="(tag, index) in product.tags"
                     :key="index"
@@ -71,11 +71,11 @@
                   </Badge>
                 </div>
 
-                <h1 class="mb-4 text-2xl md:text-3xl lg:text-4xl font-black leading-tight text-foreground">
+                <h1 class="text-2xl md:text-3xl lg:text-4xl font-black leading-tight text-foreground">
                   {{ getLocalizedText(product.title) }}
                 </h1>
 
-                <div class="mb-6 flex flex-wrap items-center gap-2">
+                <div class="flex flex-wrap items-center gap-2">
                   <Badge :variant="product.purchase_type === 'guest' ? 'warning' : 'success'">
                     <UserPlus v-if="product.purchase_type === 'guest'" class="h-3 w-3" />
                     <Lock v-else class="h-3 w-3" />
@@ -93,7 +93,7 @@
                   </Badge>
                 </div>
 
-                <div class="mb-8 border-b pb-8" ref="priceSection">
+                <div class="border-b pb-5">
                   <div class="mb-3 flex flex-wrap items-center gap-2">
                     <span class="text-sm text-muted-foreground">{{ t('products.price') }}</span>
                     <Badge v-if="(selectedSku && hasSkuPromotionPrice(selectedSku)) || (!selectedSku && hasPromotionPrice(product))" variant="danger">
@@ -188,33 +188,7 @@
                   </div>
                 </div>
 
-                <!-- 批发价规则展示 -->
-                <div v-if="selectedSkuWholesaleRules.length" class="mb-8 rounded-xl border border-emerald-200 bg-emerald-50/50 px-4 py-3 dark:border-emerald-800/50 dark:bg-emerald-950/20">
-                  <h2 class="mb-2 flex items-center gap-1.5 text-sm font-bold text-emerald-700 dark:text-emerald-300">
-                    {{ t('products.wholesaleRulesTitle') }}
-                  </h2>
-                  <div class="flex flex-wrap gap-2">
-                    <Badge v-for="tier in selectedSkuWholesaleRules" :key="`${tier.sku_id || tier.sku_code || 'all'}-${tier.min_quantity}`" variant="success" class="rounded-full px-3 py-1 font-medium">
-                      {{ formatWholesaleTier(tier) }}
-                    </Badge>
-                  </div>
-                </div>
-
-                <!-- 活动规则展示 -->
-                <div v-if="hasPromotionRules(product)" class="mb-8 rounded-xl border border-orange-200 dark:border-orange-800/50 bg-orange-50/50 dark:bg-orange-950/20 px-4 py-3">
-                  <h2 class="mb-2 text-sm font-bold text-orange-700 dark:text-orange-300 flex items-center gap-1.5">
-                    <Tag class="w-4 h-4" />
-                    {{ t('products.promotionRulesTitle') }}
-                  </h2>
-                  <ul class="space-y-1">
-                    <li v-for="rule in getPromotionRules(product)" :key="rule.id" class="text-sm text-orange-600 dark:text-orange-300/90 flex items-center gap-1.5">
-                      <span class="w-1 h-1 rounded-full bg-orange-400 dark:bg-orange-500 shrink-0"></span>
-                      <span>{{ formatPromotionRule(rule) }}</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <div v-if="activeSkus.length" class="mb-8">
+                <div v-if="showSkuSelector">
                   <h2 class="mb-3 text-sm font-bold uppercase tracking-widest text-muted-foreground">
                     {{ t('productDetail.skuTitle') }}
                   </h2>
@@ -245,18 +219,7 @@
                   </p>
                 </div>
 
-                <div v-if="getLocalizedText(product.description)" class="mb-8">
-                  <h2 class="mb-3 text-sm font-bold uppercase tracking-widest text-muted-foreground">
-                    {{ t('productDetail.description') }}
-                  </h2>
-                  <p class="text-lg leading-relaxed text-muted-foreground">
-                    {{ getLocalizedText(product.description) }}
-                  </p>
-                </div>
-              </div>
-
-              <!-- Quantity Selector -->
-                <div>
+                <div v-if="canPurchase">
                   <h2 class="mb-3 text-sm font-bold uppercase tracking-widest text-muted-foreground">
                     {{ t('productDetail.quantity') }}
                   </h2>
@@ -287,27 +250,65 @@
                     </button>
                   </div>
                 </div>
-            </div>
-          </div>
 
-          <!-- Purchase Actions: 横跨两栏，避免图片下方留白 -->
-          <div ref="purchaseActionsRef" class="space-y-6 px-6 pb-6 md:px-8 md:pb-8 lg:px-10 lg:pb-10">
-            <Alert v-if="cannotPurchaseReason" variant="destructive">
-              <AlertDescription class="font-semibold">{{ cannotPurchaseReason }}</AlertDescription>
-            </Alert>
-            <Alert v-if="purchaseWarning" class="border-warning/40 text-warning">
-              <AlertDescription class="font-semibold text-warning">{{ purchaseWarning }}</AlertDescription>
-            </Alert>
+                <div ref="purchaseActionsRef" class="space-y-3">
+                  <Alert v-if="!canPurchase && (!requiresSKUSelection || !showSkuSelector)" variant="destructive">
+                    <AlertDescription class="font-semibold">
+                      {{ cannotPurchaseReason || t('productDetail.stockUnavailable') }}
+                    </AlertDescription>
+                  </Alert>
+                  <Alert v-if="purchaseWarning" class="border-warning/40 text-warning">
+                    <AlertDescription class="font-semibold text-warning">{{ purchaseWarning }}</AlertDescription>
+                  </Alert>
 
-            <div class="space-y-3">
-              <PurchaseAccountForm v-if="requiresLogin" :disabled="!canPurchase" @authenticated="buyNow" />
-              <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Button variant="secondary" class="h-12 font-bold" :disabled="!canPurchase" @click="addToCart">
-                  {{ t('productDetail.addToCart') }}
-                </Button>
-                <Button class="h-12 font-bold" :disabled="!canPurchase" @click="buyNow">
-                  {{ t('productDetail.buyNow') }}
-                </Button>
+                  <div v-if="canPurchase && !showAccountForm" class="flex flex-wrap gap-3">
+                    <Button class="h-12 min-w-0 flex-1 font-bold" @click="startPurchase">
+                      {{ t('productDetail.buyNow') }}
+                    </Button>
+                    <Button v-if="!requiresLogin" variant="secondary" class="h-12 font-bold" @click="addToCart">
+                      {{ t('productDetail.addToCart') }}
+                    </Button>
+                  </div>
+
+                  <div v-if="showAccountForm && canPurchase" ref="accountFormRef" class="scroll-mt-24">
+                    <PurchaseAccountForm @authenticated="buyNow" />
+                  </div>
+                </div>
+
+                <div v-if="getLocalizedText(product.description)">
+                  <h2 class="mb-3 text-sm font-bold uppercase tracking-widest text-muted-foreground">
+                    {{ t('productDetail.description') }}
+                  </h2>
+                  <p class="text-sm leading-relaxed text-muted-foreground">
+                    {{ getLocalizedText(product.description) }}
+                  </p>
+                </div>
+
+                <!-- 批发价规则展示 -->
+                <div v-if="selectedSkuWholesaleRules.length" class="rounded-xl border border-emerald-200 bg-emerald-50/50 px-4 py-3 dark:border-emerald-800/50 dark:bg-emerald-950/20">
+                  <h2 class="mb-2 flex items-center gap-1.5 text-sm font-bold text-emerald-700 dark:text-emerald-300">
+                    {{ t('products.wholesaleRulesTitle') }}
+                  </h2>
+                  <div class="flex flex-wrap gap-2">
+                    <Badge v-for="tier in selectedSkuWholesaleRules" :key="`${tier.sku_id || tier.sku_code || 'all'}-${tier.min_quantity}`" variant="success" class="rounded-full px-3 py-1 font-medium">
+                      {{ formatWholesaleTier(tier) }}
+                    </Badge>
+                  </div>
+                </div>
+
+                <!-- 活动规则展示 -->
+                <div v-if="hasPromotionRules(product)" class="rounded-xl border border-orange-200 dark:border-orange-800/50 bg-orange-50/50 dark:bg-orange-950/20 px-4 py-3">
+                  <h2 class="mb-2 text-sm font-bold text-orange-700 dark:text-orange-300 flex items-center gap-1.5">
+                    <Tag class="w-4 h-4" />
+                    {{ t('products.promotionRulesTitle') }}
+                  </h2>
+                  <ul class="space-y-1">
+                    <li v-for="rule in getPromotionRules(product)" :key="rule.id" class="text-sm text-orange-600 dark:text-orange-300/90 flex items-center gap-1.5">
+                      <span class="w-1 h-1 rounded-full bg-orange-400 dark:bg-orange-500 shrink-0"></span>
+                      <span>{{ formatPromotionRule(rule) }}</span>
+                    </li>
+                  </ul>
+                </div>
               </div>
             </div>
           </div>
@@ -368,9 +369,8 @@
 
         <!-- Mobile Fixed Purchase Bar -->
         <ProductMobileBar
-          :visible="showMobileBar && !!product && !loading"
+          :visible="showMobileBar && canPurchase && !showAccountForm"
           :requires-login="requiresLogin"
-          :can-purchase="canPurchase"
           :show-member-price="mobileBarShowMemberPrice"
           :member-price-display="mobileBarMemberPriceDisplay"
           :show-sku-promotion-price="mobileBarShowSkuPromotionPrice"
@@ -381,8 +381,7 @@
           :product-promotion-price-display="mobileBarProductPromotionPriceDisplay"
           :product-price-display="mobileBarProductPriceDisplay"
           @add-to-cart="addToCart"
-          @buy-now="buyNow"
-          @go-login="goLogin"
+          @buy-now="startPurchase"
         />
       </div>
 
@@ -409,7 +408,7 @@
 
 <script setup lang="ts">
 import PurchaseAccountForm from '../components/product/PurchaseAccountForm.vue'
-import { ref, onUnmounted } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ArrowLeft, Lock, Minus, Pencil, Plus, RotateCw, Tag, UserPlus, Zap } from 'lucide-vue-next'
 import { getImageUrl } from '../utils/image'
@@ -425,27 +424,12 @@ import { Button } from '@/components/ui/button'
 
 const { t } = useI18n()
 
-// 视图专属：移动端固定购买条（IntersectionObserver 监听桌面购买区是否出屏）
+
 const purchaseActionsRef = ref<HTMLElement | null>(null)
+const accountFormRef = ref<HTMLElement | null>(null)
+const accountFormOpened = ref(false)
 const showMobileBar = ref(false)
-let observer: IntersectionObserver | null = null
 
-const setupMobileBarObserver = () => {
-  if (observer) observer.disconnect()
-  if (!purchaseActionsRef.value) return
-  observer = new IntersectionObserver(
-    (entries) => {
-      const entry = entries[0]
-      if (entry) {
-        showMobileBar.value = !entry.isIntersecting
-      }
-    },
-    { threshold: 0.1 }
-  )
-  observer.observe(purchaseActionsRef.value)
-}
-
-// 全部业务逻辑由 useProductDetail 提供（与 vault 模板共用，保证功能一致）
 const {
   getLocalizedText, siteCurrency, formatPrice,
   getPurchaseTypeLabel, getFulfillmentTypeLabel, getStockBadgeVariant, getStockStatusLabel,
@@ -465,17 +449,45 @@ const {
   requiresLogin, requiresSKUSelection, canPurchase, cannotPurchaseReason,
   categoryName, images,
   backToListTo,
-  addToCart, buyNow, goLogin, loadProduct,
+  addToCart, buyNow, loadProduct,
   mobileBarShowMemberPrice, mobileBarMemberPriceDisplay,
   mobileBarShowSkuPromotionPrice, mobileBarSkuPromotionPriceDisplay,
   mobileBarShowSkuPrice, mobileBarSkuPriceDisplay,
   mobileBarShowProductPromotionPrice, mobileBarProductPromotionPriceDisplay, mobileBarProductPriceDisplay,
-} = useProductDetail({ onLoaded: () => setupMobileBarObserver() })
+} = useProductDetail()
 
-onUnmounted(() => {
-  if (observer) {
-    observer.disconnect()
-    observer = null
+const showAccountForm = computed(() => requiresLogin.value && accountFormOpened.value)
+const showSkuSelector = computed(() => {
+  const rows = activeSkus.value
+  if (product.value?.is_sold_out || product.value?.stock_status === 'out_of_stock') return false
+  if (!rows.some(isSkuPurchasable)) return false
+  return rows.length > 1 || String(rows[0]?.sku_code || '').trim().toUpperCase() !== 'DEFAULT'
+})
+
+const startPurchase = async () => {
+  if (!canPurchase.value) return
+  if (!requiresLogin.value) {
+    buyNow()
+    return
   }
+
+  accountFormOpened.value = true
+  await nextTick()
+  accountFormRef.value?.querySelector<HTMLInputElement>('input[type="email"]')?.focus({ preventScroll: true })
+  accountFormRef.value?.scrollIntoView({ block: 'nearest' })
+}
+
+watch(() => product.value?.slug, () => {
+  accountFormOpened.value = false
+})
+
+watch(purchaseActionsRef, (target, _, onCleanup) => {
+  showMobileBar.value = false
+  if (!target) return
+  const observer = new IntersectionObserver(([entry]) => {
+    if (entry) showMobileBar.value = entry.intersectionRatio < 1
+  }, { rootMargin: '-64px 0px -57px', threshold: 1 })
+  observer.observe(target)
+  onCleanup(() => observer.disconnect())
 })
 </script>

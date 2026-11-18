@@ -3,9 +3,9 @@
     class="fixed top-0 left-0 right-0 z-50 bg-card/80 border-b backdrop-blur-md transition-all"
     :class="scrolled ? 'py-2 shadow-lg' : 'py-4'"
     :style="{ transitionDuration: 'var(--ui-duration-normal)' }">
-    <div class="container mx-auto px-4 flex items-center justify-between gap-4">
+    <div class="container mx-auto flex items-center justify-between gap-4 px-4 lg:grid lg:grid-cols-3">
       <!-- Logo -->
-      <router-link to="/" class="theme-wordmark group relative gap-3" :title="brandSiteName">
+      <router-link to="/" class="theme-wordmark group relative gap-3 lg:justify-self-start" :title="brandSiteName">
         <img
           v-if="brandLogo"
           :src="brandLogo"
@@ -16,7 +16,7 @@
       </router-link>
 
       <!-- Desktop Menu -->
-      <div class="hidden lg:flex items-center space-x-1 min-w-0 overflow-x-auto scrollbar-hide">
+      <div class="scrollbar-hide hidden min-w-0 max-w-full items-center gap-1 overflow-x-auto lg:flex lg:justify-self-center">
         <template v-for="item in menuItems" :key="item.key">
           <Button v-if="item.type === 'route'" as-child variant="ghost" size="sm"
             class="gap-1.5 text-muted-foreground whitespace-nowrap shrink-0">
@@ -36,7 +36,7 @@
       </div>
 
       <!-- Right Side Actions -->
-      <div class="flex items-center shrink-0 space-x-2 lg:space-x-4">
+      <div class="flex shrink-0 items-center gap-2 lg:justify-self-end lg:gap-1 xl:gap-4">
         <!-- Cart (desktop only, mobile has bottom nav) -->
         <Button as-child variant="ghost" size="sm" class="hidden lg:flex relative gap-2 text-muted-foreground">
           <router-link to="/cart">
@@ -224,17 +224,17 @@ const appStore = useAppStore()
 const cartStore = useCartStore()
 const userAuthStore = useUserAuthStore()
 const { theme, toggleTheme } = useTheme()
-const { primaryNavItems, secondaryNavItems } = useNavConfig()
+const { primaryNavItems, customNavItems } = useNavConfig()
 
 const showMobileMenu = ref(false)
 const langOpen = ref(false)
 const scrolled = ref(false)
 const cartBounce = ref(false)
 
-const menuItems = primaryNavItems
+const hiddenNavKeys = new Set(['blog', 'notice', 'about'])
+const menuItems = computed(() => primaryNavItems.value.filter(item => !hiddenNavKeys.has(item.key)))
 
-// Mobile drawer only shows items NOT in the bottom nav (Home, Products, Cart, Me are in bottom nav)
-const mobileDrawerItems = secondaryNavItems
+const mobileDrawerItems = customNavItems
 
 const languages = [
   { code: 'zh-CN', name: '简体中文' },

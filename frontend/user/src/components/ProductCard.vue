@@ -1,31 +1,25 @@
 <template>
   <Card
-    class="group relative overflow-hidden flex flex-col h-full rounded-2xl transition-all theme-slide-up"
+    class="group relative overflow-hidden flex flex-col h-full w-full max-w-48 rounded-2xl transition-all theme-slide-up"
     :class="isSoldOut(product)
       ? 'cursor-default border-destructive/30'
       : 'cursor-pointer hover:-translate-y-1 hover:border-primary/30 hover:shadow-lg'"
     :style="{ animationDelay: `${index * animationStep}ms` }"
     @click="$emit('click', product.slug)">
     <!-- Image Area -->
-    <div class="aspect-square overflow-hidden bg-muted relative shrink-0">
+    <div class="overflow-hidden bg-muted relative shrink-0">
       <img v-if="displayImageSrc && !imageErrored" :src="displayImageSrc"
         :alt="getLocalizedText(product.title)" loading="lazy" decoding="async"
-        class="w-full h-full object-contain transition-[filter]"
-        :class="isSoldOut(product) ? 'grayscale opacity-70' : ''"
+        class="block h-auto w-full transition-[filter]"
+        :class="[
+          displayImageSrc === productImageSrc ? 'aspect-[auto_1/1]' : 'aspect-square object-contain',
+          isSoldOut(product) ? 'grayscale opacity-70' : '',
+        ]"
         @error="handleImageError" />
-      <div v-else class="w-full h-full flex items-center justify-center text-muted-foreground" role="img"
+      <div v-else class="w-full aspect-square flex items-center justify-center text-muted-foreground" role="img"
         :aria-label="getLocalizedText(product.title)">
         <ImageIcon class="w-8 h-8 md:w-12 md:h-12" :stroke-width="1.5" aria-hidden="true" />
       </div>
-
-      <Badge
-        v-if="isSoldOut(product)"
-        variant="destructive"
-        size="xs"
-        class="absolute left-2 top-2 md:left-4 md:top-4 z-30 tracking-wider shadow-sm"
-      >
-        {{ t('products.stockStatus.outOfStock') }}
-      </Badge>
 
       <!-- Tags -->
       <div v-if="!isSoldOut(product) && product.tags && product.tags.length > 0"
@@ -38,26 +32,27 @@
     </div>
 
     <!-- Content Area -->
-    <div class="p-3 md:p-4 relative z-20 flex flex-col flex-1">
-      <div v-if="product.category?.name" class="text-xs text-muted-foreground uppercase tracking-wider mb-1 md:mb-2 truncate">
-        {{ t('products.categoryLabel') }} · {{ getLocalizedText(product.category.name) }}
+    <div class="relative z-20 flex flex-1 flex-col gap-2 p-3">
+      <div class="flex items-center justify-between gap-1.5"
+        :class="{ 'hidden md:flex': !product.category?.name && !isSoldOut(product) }">
+        <span class="min-w-0 truncate text-xs font-medium text-muted-foreground">
+          {{ getLocalizedText(product.category?.name) }}
+        </span>
+        <Badge
+          class="shrink-0"
+          :class="{ 'hidden md:inline-flex': !isSoldOut(product) }"
+          size="xs"
+          :variant="isSoldOut(product) ? 'danger' : getStockBadgeVariant(product.stock_status)"
+        >
+          {{ isSoldOut(product) ? t('products.stockStatus.outOfStock') : getStockStatusLabel(product) }}
+        </Badge>
       </div>
-      <h3 class="text-sm md:text-lg font-bold text-foreground mb-1 md:mb-2 transition-colors line-clamp-1">
+      <h3 class="line-clamp-2 text-sm font-bold leading-snug text-foreground md:text-base">
         {{ getLocalizedText(product.title) }}
       </h3>
 
       <!-- Badges -->
-      <div class="mb-2 md:mb-3 flex flex-wrap items-center gap-1 md:gap-2">
-        <!-- Mobile: show only fulfillment type badge -->
-        <Badge
-          class="md:hidden"
-          size="xs"
-          :variant="product.fulfillment_type === 'auto' ? 'info' : 'neutral'"
-        >
-          {{ getFulfillmentTypeLabel(product.fulfillment_type) }}
-        </Badge>
-
-        <!-- Desktop: show all badges -->
+      <div class="flex flex-wrap items-center gap-1">
         <Badge
           class="hidden md:inline-flex"
           size="xs"
@@ -69,27 +64,22 @@
         </Badge>
 
         <Badge
-          class="hidden md:inline-flex"
           size="xs"
           :variant="product.fulfillment_type === 'auto' ? 'info' : 'neutral'"
         >
-          <Zap v-if="product.fulfillment_type === 'auto'" class="h-3 w-3" />
-          <Pencil v-else class="h-3 w-3" />
+          <Zap v-if="product.fulfillment_type === 'auto'" class="hidden size-3 md:block" />
+          <Pencil v-else class="hidden size-3 md:block" />
           {{ getFulfillmentTypeLabel(product.fulfillment_type) }}
-        </Badge>
-
-        <Badge class="hidden md:inline-flex" size="xs" :variant="getStockBadgeVariant(product.stock_status)">
-          {{ getStockStatusLabel(product) }}
         </Badge>
       </div>
 
-      <p class="hidden md:block text-muted-foreground text-sm mb-6 line-clamp-2">
-        {{ getLocalizedText(product.description) }}
+      <p v-if="description" class="hidden text-xs leading-relaxed text-muted-foreground md:line-clamp-2">
+        {{ description }}
       </p>
 
-      <div class="flex items-center justify-between border-t pt-2 md:pt-4 mt-auto">
-        <div class="flex flex-col">
-          <span class="hidden md:block text-xs text-muted-foreground uppercase tracking-wider">{{ t('products.price') }}</span>
+      <div class="mt-auto flex items-center justify-between gap-2 border-t pt-2">
+        <div class="flex min-w-0 flex-col">
+          <span class="sr-only">{{ t('products.price') }}</span>
           <span
             v-if="exclusivePrice !== null"
             class="theme-price-sm text-amber-600 dark:text-amber-300"
@@ -137,30 +127,28 @@
           </div>
         </div>
 
-        <div class="flex items-center gap-2">
-          <!-- Quick buy cart button -->
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            class="w-8 h-8 md:w-9 md:h-9"
-            :aria-label="t('products.quickBuyAria')"
-            :disabled="isSoldOut(product)"
-            @click.stop="$emit('quickBuy', product)"
-          >
-            <ShoppingCart class="h-4 w-4" />
-          </Button>
-          <!-- Desktop: view details -->
-          <span
-            class="hidden md:flex text-xs uppercase font-bold transition-colors items-center gap-1"
-            :class="isSoldOut(product)
-              ? 'text-destructive/90'
-              : 'text-muted-foreground group-hover:text-foreground'">
-            <ArrowRight class="w-4 h-4 transition-transform" :class="isSoldOut(product) ? '' : 'group-hover:translate-x-1'" />
-          </span>
-          <!-- Mobile: arrow only -->
-          <ChevronRight class="md:hidden w-4 h-4 text-muted-foreground" />
-        </div>
+        <Button
+          v-if="isSoldOut(product)"
+          type="button"
+          variant="ghost"
+          size="icon"
+          class="size-8 shrink-0"
+          :aria-label="t('products.viewDetails')"
+          @click.stop="$emit('click', product.slug)"
+        >
+          <ArrowRight class="size-4" />
+        </Button>
+        <Button
+          v-else
+          type="button"
+          variant="outline"
+          size="icon"
+          class="size-8 shrink-0"
+          :aria-label="t('products.quickBuyAria')"
+          @click.stop="$emit('quickBuy', product)"
+        >
+          <ShoppingCart class="size-4" />
+        </Button>
       </div>
     </div>
   </Card>
@@ -169,7 +157,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { computed, ref, watch } from 'vue'
-import { ArrowRight, ChevronRight, Image as ImageIcon, Lock, Pencil, ShoppingCart, UserPlus, Zap } from 'lucide-vue-next'
+import { ArrowRight, Image as ImageIcon, Lock, Pencil, ShoppingCart, UserPlus, Zap } from 'lucide-vue-next'
 import { getFirstImageUrl, getImageUrl } from '../utils/image'
 import { useLocalized, useProductLabels } from '../composables/useProduct'
 import { Badge } from '@/components/ui/badge'
@@ -196,13 +184,15 @@ const { t } = useI18n()
 const { getLocalizedText, siteCurrency, formatPrice } = useLocalized()
 const { getPurchaseTypeLabel, getFulfillmentTypeLabel, getStockBadgeVariant, getStockStatusLabel, isSoldOut, hasPromotionPrice, getPromotionPriceAmount, hasPromotionRules, hasWholesalePrices, getCardExclusivePrice } = useProductLabels()
 const exclusivePrice = computed(() => getCardExclusivePrice(props.product))
+const description = computed(() => getLocalizedText(props.product.description))
 
 const imageErrored = ref(false)
 const attemptIdx = ref(0)
+const productImageSrc = computed(() => getFirstImageUrl(props.product?.images))
 
 const imageCandidates = computed<string[]>(() => {
   const arr: string[] = []
-  const primary = getFirstImageUrl(props.product?.images)
+  const primary = productImageSrc.value
   if (primary) arr.push(primary)
   const categoryIcon = props.product?.category?.icon
   if (categoryIcon) {
