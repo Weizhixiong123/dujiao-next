@@ -61,6 +61,9 @@ func (s *Service) CancelManual(id uint) error {
 
 	switch procOrder.Status {
 	case constants.ProcurementStatusPending, constants.ProcurementStatusFailed, constants.ProcurementStatusRejected:
+		if procOrder.UpstreamRequest != "" {
+			return procurementcontract.ErrUpstreamCancelRefused
+		}
 		// 尚未在上游成单，可直接本地取消
 	case constants.ProcurementStatusAccepted:
 		// 上游已成单（通常已从上游钱包扣款）：必须上游取消成功才能标记取消，

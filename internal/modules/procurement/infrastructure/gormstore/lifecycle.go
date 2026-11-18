@@ -90,6 +90,14 @@ func (s *Store) NewLifecycle(
 
 func (l *Lifecycle) DeliverUpstreamOrder(orderID uint, fulfillment *procurementcontract.Fulfillment, now time.Time) (bool, error) {
 	delivered := false
+	partial := fulfillment != nil && fulfillment.Status == constants.OrderStatusPartiallyDelivered
+	orderStatus, fulfillmentStatus := constants.OrderStatusDelivered, constants.FulfillmentStatusDelivered
+	if partial {
+		if supplierCardCount(fulfillment.DeliveryData) <= 0 {
+			return false, nil
+		}
+		orderStatus, fulfillmentStatus = constants.OrderStatusPartiallyDelivered, constants.FulfillmentStatusPending
+	}
 	err := l.db.Transaction(func(tx *gorm.DB) error {
 		// 先锁订单再复核状态（与退款的加锁顺序一致）：退款先提交时不能再交付，也不能覆盖退款状态。
 		var order lifecycleOrderRecord
@@ -102,6 +110,10 @@ func (l *Lifecycle) DeliverUpstreamOrder(orderID uint, fulfillment *procurementc
 		if order.Status == constants.OrderStatusRefunded || order.Status == constants.OrderStatusCanceled {
 			return nil
 		}
+		if partial && order.Status != constants.OrderStatusPaid && order.Status != constants.OrderStatusFulfilling &&
+			order.Status != constants.OrderStatusPartiallyDelivered {
+			return nil
+		}
 		if fulfillment != nil {
 			var existing lifecycleFulfillmentRecord
 			err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
@@ -112,54 +124,90 @@ func (l *Lifecycle) DeliverUpstreamOrder(orderID uint, fulfillment *procurementc
 			}
 			if err != nil {
 				deliveredAt := fulfillment.DeliveredAt
-				if deliveredAt == nil {
+				if deliveredAt == nil && !partial {
 					deliveredAt = &now
 				}
 				if err := tx.Create(&lifecycleFulfillmentRecord{
 					OrderID: orderID, Type: constants.FulfillmentTypeUpstream,
-					Status: constants.FulfillmentStatusDelivered, Payload: fulfillment.Payload,
+					Status: fulfillmentStatus, Payload: fulfillment.Payload,
 					LogisticsJSON: fulfillment.DeliveryData, DeliveredAt: deliveredAt,
 					CreatedAt: now, UpdatedAt: now,
 				}).Error; err != nil {
 					return err
 				}
+			} else if existing.Status == constants.FulfillmentStatusPending && existing.Type == constants.FulfillmentTypeUpstream &&
+				supplierCardCount(existing.LogisticsJSON) > 0 {
+				if partial && supplierCardCount(existing.LogisticsJSON) >= supplierCardCount(fulfillment.DeliveryData) {
+					return nil
+				}
+				changes := map[string]interface{}{
+					"status": fulfillmentStatus, "payload": fulfillment.Payload,
+					"logistics_json": fulfillment.DeliveryData, "updated_at": now,
+				}
+				if !partial {
+					changes["delivered_at"] = now
+					if fulfillment.DeliveredAt != nil {
+						changes["delivered_at"] = *fulfillment.DeliveredAt
+					}
+				}
+				if err := tx.Model(&existing).Updates(changes).Error; err != nil {
+					return err
+				}
+			} else if partial {
+				return nil
 			}
 		}
 		delivered = true
 		return tx.Table(order.TableName()).Where("id = ?", orderID).Updates(map[string]interface{}{
-			"status": constants.OrderStatusDelivered, "updated_at": now,
+			"status": orderStatus, "updated_at": now,
 		}).Error
 	})
 	return delivered, err
+}
+
+func supplierCardCount(data jsonmap.JSON) int {
+	switch count := data["supplier_card_count"].(type) {
+	case int:
+		return count
+	case float64:
+		return int(count)
+	default:
+		return 0
+	}
 }
 
 func (l *Lifecycle) SyncParentStatus(parentID uint, now time.Time) (string, error) {
 	if parentID == 0 {
 		return "", nil
 	}
-	var parent lifecycleOrderRecord
-	if err := l.db.Preload("Children").First(&parent, parentID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return "", nil
+	var status string
+	err := l.db.Transaction(func(tx *gorm.DB) error {
+		var parent lifecycleOrderRecord
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Preload("Children").First(&parent, parentID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil
+			}
+			return err
 		}
+		if parent.ParentID != nil {
+			return nil
+		}
+		status = parent.Status
+		if status == constants.OrderStatusCanceled || status == constants.OrderStatusRefunded {
+			return nil
+		}
+		next := calculateParentStatus(parent.Children, status)
+		if next == "" || next == status {
+			return nil
+		}
+		status = next
+		return tx.Table(parent.TableName()).Where("id = ? AND deleted_at IS NULL", parent.ID).
+			Updates(map[string]interface{}{"status": status, "updated_at": now}).Error
+	})
+	if err != nil {
 		return "", err
 	}
-	if parent.ParentID != nil {
-		return "", nil
-	}
-	if parent.Status == constants.OrderStatusCanceled {
-		return parent.Status, nil
-	}
-	newStatus := calculateParentStatus(parent.Children, parent.Status)
-	if newStatus == "" || newStatus == parent.Status {
-		return parent.Status, nil
-	}
-	if err := l.db.Table(parent.TableName()).Where("id = ? AND deleted_at IS NULL", parent.ID).Updates(map[string]interface{}{
-		"status": newStatus, "updated_at": now,
-	}).Error; err != nil {
-		return "", err
-	}
-	return newStatus, nil
+	return status, nil
 }
 
 func (l *Lifecycle) EnqueueStatusEmail(orderID uint, status string) (bool, error) {
@@ -236,7 +284,7 @@ func calculateParentStatus(children []lifecycleOrderRecord, currentStatus string
 	if delivered == size {
 		return constants.OrderStatusDelivered
 	}
-	if delivered > 0 {
+	if delivered > 0 || counts[constants.OrderStatusPartiallyDelivered] > 0 {
 		return constants.OrderStatusPartiallyDelivered
 	}
 	if counts[constants.OrderStatusFulfilling] > 0 {

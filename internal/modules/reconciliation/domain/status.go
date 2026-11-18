@@ -19,7 +19,8 @@ func IsStatusConsistent(localStatus, upstreamStatus string) bool {
 	case constants.ProcurementStatusPending:
 		return upstreamStatus == "pending" || upstreamStatus == "paid"
 	case constants.ProcurementStatusSubmitted, constants.ProcurementStatusAccepted:
-		return upstreamStatus == "paid" || upstreamStatus == "processing" || upstreamStatus == "accepted"
+		return upstreamStatus == "paid" || upstreamStatus == "processing" || upstreamStatus == "accepted" ||
+			upstreamStatus == constants.OrderStatusPartiallyDelivered
 	case constants.ProcurementStatusFailed, constants.ProcurementStatusRejected:
 		return upstreamStatus == "failed" || upstreamStatus == "rejected"
 	case "fulfilling":

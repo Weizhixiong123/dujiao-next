@@ -11,6 +11,7 @@ type Repository interface {
 	GetByLocalOrderID(localOrderID uint) (*procurementdomain.Order, error)
 	GetByLocalOrderNo(localOrderNo string) (*procurementdomain.Order, error)
 	Create(order *procurementdomain.Order) error
+	FreezeUpstreamRequest(id uint, status, request string) (bool, error)
 	// UpdateStatus 仅当当前状态仍为 fromStatus 时写入（比较后再写），返回是否写入；
 	// 回调、轮询、提交可能并发处理同一采购单，未写入说明已被其它路径推进。
 	UpdateStatus(id uint, fromStatus, toStatus string, updates map[string]interface{}) (bool, error)

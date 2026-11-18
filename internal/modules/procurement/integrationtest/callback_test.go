@@ -10,7 +10,49 @@ import (
 	"github.com/dujiao-next/internal/constants"
 	procurementcontract "github.com/dujiao-next/internal/modules/procurement/contract"
 	procurementgormstore "github.com/dujiao-next/internal/modules/procurement/infrastructure/gormstore"
+	"github.com/dujiao-next/internal/shared/jsonmap"
 )
+
+func TestUpstreamPartialDeliveryDoesNotFinishOrderOrOverwriteNewerCards(t *testing.T) {
+	db := setupProcurementTestDB(t)
+	order := createProcTestOrder(t, db, "PROC-YOUKA-01", constants.OrderStatusFulfilling, constants.FulfillmentTypeUpstream)
+	proc := createTestProcurementOrder(t, db, 1, order.ID, order.OrderNo, constants.ProcurementStatusAccepted)
+	svc := newTestProcurementService(db, newTestSiteConnectionService(db, "test-key", t.TempDir()))
+
+	deliver := func(status, payload string, count int) {
+		t.Helper()
+		err := svc.HandleUpstreamCallback(proc.ID, status, &procurementcontract.Fulfillment{
+			Status: status, Payload: payload, DeliveryData: jsonmap.JSON{"supplier_card_count": count},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	assertState := func(orderStatus, procStatus, payload string) {
+		t.Helper()
+		var storedOrder orderdomain.Order
+		var storedProc ProcurementOrder
+		var fulfillment fulfillmentdomain.Fulfillment
+		if err := db.First(&storedOrder, order.ID).Error; err != nil {
+			t.Fatal(err)
+		}
+		if err := db.First(&storedProc, proc.ID).Error; err != nil {
+			t.Fatal(err)
+		}
+		if err := db.Where("order_id = ?", order.ID).First(&fulfillment).Error; err != nil {
+			t.Fatal(err)
+		}
+		if storedOrder.Status != orderStatus || storedProc.Status != procStatus || fulfillment.Payload != payload {
+			t.Fatalf("unexpected delivery state: order=%s procurement=%s payload=%s", storedOrder.Status, storedProc.Status, fulfillment.Payload)
+		}
+	}
+	deliver(constants.OrderStatusPartiallyDelivered, "a\nb", 2)
+	deliver(constants.OrderStatusPartiallyDelivered, "a", 1)
+	assertState(constants.OrderStatusPartiallyDelivered, constants.ProcurementStatusAccepted, "a\nb")
+	deliver("delivered", "a\nb\nc", 3)
+	deliver(constants.OrderStatusPartiallyDelivered, "a\nb", 2)
+	assertState(constants.OrderStatusDelivered, constants.ProcurementStatusFulfilled, "a\nb\nc")
+}
 
 type procurementCallbackStatusFixture struct {
 	orderNo                   string

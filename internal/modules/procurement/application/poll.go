@@ -49,7 +49,7 @@ func (s *Service) PollUpstreamStatus(procurementOrderID uint) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	detail, err := connection.GetOrder(ctx, procOrder.UpstreamOrderID)
+	detail, err := connection.GetOrder(ctx, procOrder.UpstreamOrderID, procOrder.UpstreamOrderNo)
 	if err != nil {
 		logger.Warnw("procurement_poll_status_error",
 			"procurement_order_id", procOrder.ID,
@@ -68,6 +68,11 @@ func (s *Service) PollUpstreamStatus(procurementOrderID uint) error {
 		return s.HandleUpstreamCallback(procOrder.ID, mappedStatus, nil)
 	case "refunded", "partially_refunded":
 		return s.HandleUpstreamCallback(procOrder.ID, mappedStatus, detail.Fulfillment)
+	case constants.OrderStatusPartiallyDelivered:
+		if err := s.HandleUpstreamCallback(procOrder.ID, mappedStatus, detail.Fulfillment); err != nil {
+			return err
+		}
+		return s.requeuePoll(procOrder)
 	default:
 		// 状态未变，继续轮询
 		return s.requeuePoll(procOrder)
@@ -179,7 +184,7 @@ func (s *Service) requeueStalledSubmissions() {
 }
 
 func (s *Service) syncAcceptedOrder(ctx context.Context, procOrder *procurementdomain.Order) {
-	if procOrder.UpstreamOrderID == 0 {
+	if procOrder.UpstreamOrderID == 0 && procOrder.UpstreamOrderNo == "" {
 		return
 	}
 	connection, err := s.connections.Open(procOrder.ConnectionID)
@@ -187,7 +192,7 @@ func (s *Service) syncAcceptedOrder(ctx context.Context, procOrder *procurementd
 		return
 	}
 	reqCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	detail, err := connection.GetOrder(reqCtx, procOrder.UpstreamOrderID)
+	detail, err := connection.GetOrder(reqCtx, procOrder.UpstreamOrderID, procOrder.UpstreamOrderNo)
 	cancel()
 	if err != nil {
 		logger.Warnw("procurement_sync_accepted_poll_error",
@@ -200,7 +205,7 @@ func (s *Service) syncAcceptedOrder(ctx context.Context, procOrder *procurementd
 
 	mappedStatus := mapProcurementUpstreamStatus(detail.Status)
 	switch mappedStatus {
-	case "delivered", "canceled", "refunded", "partially_refunded":
+	case "delivered", "canceled", "refunded", "partially_refunded", constants.OrderStatusPartiallyDelivered:
 		fulfillment := detail.Fulfillment
 		if mappedStatus == "canceled" {
 			fulfillment = nil

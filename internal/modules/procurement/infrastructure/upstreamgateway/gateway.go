@@ -37,12 +37,25 @@ func (g *Gateway) Open(connectionID uint) (procurementcontract.UpstreamConnectio
 	if err != nil {
 		return nil, err
 	}
-	return &session{connection: connection, adapter: adapter}, nil
+	s := &session{connection: connection, adapter: adapter}
+	if youka, ok := adapter.(*upstream.YoukaAdapter); ok {
+		return &youkaSession{session: s, adapter: youka}, nil
+	}
+	return s, nil
 }
 
 type session struct {
 	connection *siteconnectiondomain.Connection
 	adapter    upstream.Adapter
+}
+
+type youkaSession struct {
+	*session
+	adapter *upstream.YoukaAdapter
+}
+
+func (s *youkaSession) PrepareOrder(ctx context.Context, request procurementcontract.CreateOrderRequest, maxAmount, currency string) (string, error) {
+	return s.adapter.PrepareOrder(ctx, request.DownstreamOrderNo, request.SKUID, request.Quantity, maxAmount, currency)
 }
 
 var _ procurementcontract.UpstreamConnection = (*session)(nil)
@@ -55,6 +68,7 @@ func (s *session) CreateOrder(ctx context.Context, request procurementcontract.C
 	result, err := s.adapter.CreateOrder(ctx, upstream.CreateUpstreamOrderReq{
 		SKUID: request.SKUID, Quantity: request.Quantity, ManualFormData: request.ManualFormData,
 		DownstreamOrderNo: request.DownstreamOrderNo, TraceID: request.TraceID, CallbackURL: request.CallbackURL,
+		PreparedOrder: request.PreparedOrder,
 	})
 	if err != nil {
 		return nil, err
@@ -63,11 +77,12 @@ func (s *session) CreateOrder(ctx context.Context, request procurementcontract.C
 		OK: result.OK, OrderID: result.OrderID, OrderNo: result.OrderNo,
 		Status: result.Status, Amount: result.Amount, Currency: result.Currency,
 		ErrorCode: result.ErrorCode, ErrorMessage: result.ErrorMessage,
+		Fulfillment: fromUpstreamFulfillment(result.Fulfillment),
 	}, nil
 }
 
-func (s *session) GetOrder(ctx context.Context, orderID uint) (*procurementcontract.UpstreamOrder, error) {
-	detail, err := s.adapter.GetOrder(ctx, orderID)
+func (s *session) GetOrder(ctx context.Context, orderID uint, orderNo ...string) (*procurementcontract.UpstreamOrder, error) {
+	detail, err := s.adapter.GetOrder(ctx, orderID, orderNo...)
 	if err != nil {
 		return nil, err
 	}

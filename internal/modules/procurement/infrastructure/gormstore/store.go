@@ -62,6 +62,13 @@ func (s *Store) Create(order *procurementdomain.Order) error {
 	return s.db.Omit(clause.Associations).Create(order).Error
 }
 
+func (s *Store) FreezeUpstreamRequest(id uint, status, request string) (bool, error) {
+	result := s.db.Model(&procurementdomain.Order{}).
+		Where("id = ? AND deleted_at IS NULL AND status = ? AND (upstream_request IS NULL OR upstream_request = '')", id, status).
+		Update("upstream_request", request)
+	return result.RowsAffected == 1, result.Error
+}
+
 func (s *Store) UpdateStatus(id uint, fromStatus, toStatus string, updates map[string]interface{}) (bool, error) {
 	if updates == nil {
 		updates = map[string]interface{}{}

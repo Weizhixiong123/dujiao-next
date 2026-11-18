@@ -89,6 +89,24 @@ func (s *Service) SubmitToUpstream(procurementOrderID uint) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	if preparer, ok := connection.(procurementcontract.OrderPreparer); ok {
+		req.PreparedOrder = procOrder.UpstreamRequest
+		if req.PreparedOrder == "" {
+			snapshot, err := preparer.PrepareOrder(ctx, req, localOrder.TotalAmount.StringFixed(2), localOrder.Currency)
+			if err != nil {
+				return s.handleSubmitFailure(procOrder, connection, err.Error(), false)
+			}
+			saved, err := s.procRepo.FreezeUpstreamRequest(procOrder.ID, procOrder.Status, snapshot)
+			if err != nil {
+				return fmt.Errorf("save upstream purchase request: %w", err)
+			}
+			if !saved {
+				return nil
+			}
+			req.PreparedOrder = snapshot
+		}
+	}
+
 	resp, err := connection.CreateOrder(ctx, req)
 	if err != nil {
 		return s.handleSubmitFailure(procOrder, connection, fmt.Sprintf("upstream request error: %v", err), true)
@@ -139,6 +157,12 @@ func (s *Service) SubmitToUpstream(procurementOrderID uint) error {
 	// 入队轮询任务（30s 延迟，作为回调的 fallback）
 	if s.queue != nil {
 		_ = s.queue.EnqueuePoll(procOrder.ID, 30*time.Second)
+	}
+	if req.PreparedOrder != "" {
+		switch resp.Status {
+		case "delivered", "refunded", "partially_refunded", constants.OrderStatusPartiallyDelivered:
+			return s.HandleUpstreamCallback(procOrder.ID, resp.Status, resp.Fulfillment)
+		}
 	}
 
 	return nil
@@ -304,15 +328,26 @@ func (s *Service) handleSubmitFailure(procOrder *procurementdomain.Order, connec
 // isRetryableErrorCode 判断上游错误码是否可重试
 func isRetryableErrorCode(code string) bool {
 	nonRetryable := map[string]bool{
-		"insufficient_balance": true,
-		"payment_failed":       true,
-		"product_unavailable":  true,
-		"sku_unavailable":      true,
-		"invalid_request":      true,
-		"unauthorized":         true,
-		"forbidden":            true,
-		"duplicate_order":      true,
-		"product_out_of_stock": true,
+		"auth_failed":            true,
+		"key_disabled":           true,
+		"ip_not_allowed":         true,
+		"scope_denied":           true,
+		"price_changed":          true,
+		"intro_confirm_required": true,
+		"intro_changed":          true,
+		"out_of_stock":           true,
+		"client_order_conflict":  true,
+		"qty_limit_exceeded":     true,
+		"daily_limit_exceeded":   true,
+		"insufficient_balance":   true,
+		"payment_failed":         true,
+		"product_unavailable":    true,
+		"sku_unavailable":        true,
+		"invalid_request":        true,
+		"unauthorized":           true,
+		"forbidden":              true,
+		"duplicate_order":        true,
+		"product_out_of_stock":   true,
 	}
 	return !nonRetryable[strings.ToLower(strings.TrimSpace(code))]
 }

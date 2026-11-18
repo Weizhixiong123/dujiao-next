@@ -33,7 +33,17 @@ func (s *Service) HandleUpstreamCallback(procurementOrderID uint, upstreamStatus
 		return nil
 	}
 
+	if s.orderLifecycle != nil && fulfillment != nil && fulfillment.Status == constants.OrderStatusPartiallyDelivered &&
+		(upstreamStatus == constants.OrderStatusPartiallyDelivered || upstreamStatus == "partially_refunded") {
+		if _, err := s.createUpstreamFulfillment(procOrder.LocalOrderID, fulfillment, now); err != nil {
+			return err
+		}
+	}
+
 	switch upstreamStatus {
+	case constants.OrderStatusPartiallyDelivered:
+		// Leave procurement open for the remaining cards.
+		return nil
 	case "delivered", "completed", "fulfilled":
 		// 先在一个事务里复核本地订单、写交付记录并置为已交付（幂等），再推进采购单状态；
 		// 写入失败时采购单保持非终态以便上游重试
@@ -152,8 +162,12 @@ func (s *Service) HandleUpstreamCallback(procurementOrderID uint, upstreamStatus
 		if upstreamStatus == "refunded" {
 			targetStatus = constants.ProcurementStatusRefunded
 		}
-		if _, err := s.procRepo.UpdateStatus(procOrder.ID, procOrder.Status, targetStatus, updates); err != nil {
+		changed, err := s.procRepo.UpdateStatus(procOrder.ID, procOrder.Status, targetStatus, updates)
+		if err != nil {
 			return fmt.Errorf("update procurement status: %w", err)
+		}
+		if changed && procOrder.UpstreamRequest != "" && procOrder.Status != targetStatus {
+			s.notifyProcurementFailure(procOrder, "Youka refunded the upstream balance; review the customer order")
 		}
 		logger.Infow("procurement_order_refunded",
 			"procurement_order_id", procOrder.ID,
@@ -174,7 +188,16 @@ func (s *Service) HandleUpstreamCallback(procurementOrderID uint, upstreamStatus
 
 // createUpstreamFulfillment 复核本地订单后写入上游交付记录并置为已交付；订单已退款/取消时返回 false
 func (s *Service) createUpstreamFulfillment(orderID uint, uf *procurementcontract.Fulfillment, now time.Time) (bool, error) {
-	return s.orderLifecycle.DeliverUpstreamOrder(orderID, uf, now)
+	written, err := s.orderLifecycle.DeliverUpstreamOrder(orderID, uf, now)
+	if err != nil || !written || uf == nil || uf.Status != constants.OrderStatusPartiallyDelivered {
+		return written, err
+	}
+	order, err := s.orderRepo.GetByID(orderID)
+	if err != nil || order == nil || order.ParentID == nil {
+		return written, err
+	}
+	_, err = s.orderLifecycle.SyncParentStatus(*order.ParentID, now)
+	return written, err
 }
 
 // isUpstreamTransitionAllowed 上游回调允许的采购单状态转换：
@@ -185,7 +208,7 @@ func isUpstreamTransitionAllowed(current, upstreamStatus string) bool {
 	switch upstreamStatus {
 	case "partially_refunded":
 		return current != constants.ProcurementStatusRefunded
-	case "delivered", "completed", "fulfilled", "canceled":
+	case "delivered", "completed", "fulfilled", "canceled", constants.OrderStatusPartiallyDelivered:
 		switch current {
 		case constants.ProcurementStatusFulfilled, constants.ProcurementStatusCompleted,
 			constants.ProcurementStatusRefunded, constants.ProcurementStatusCanceled:

@@ -226,7 +226,7 @@ const buildPayload = () => {
     api_key: form.api_key,
     api_secret: form.api_secret,
     protocol: form.protocol,
-    callback_url: form.callback_url,
+    callback_url: form.protocol === 'youka' ? '' : form.callback_url,
     retry_max: Number(form.retry_max) || 3,
     retry_intervals: JSON.stringify(intervals),
     exchange_rate: Number(form.exchange_rate) || 1,
@@ -514,10 +514,14 @@ onMounted(() => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="dujiao-next">dujiao-next</SelectItem>
+                  <SelectItem value="youka">{{ t('siteConnections.form.youkaProtocol') }}</SelectItem>
                 </SelectContent>
               </Select>
+              <p v-if="form.protocol === 'youka'" class="mt-1 text-xs text-muted-foreground">
+                {{ t('siteConnections.form.youkaBaseUrlHint') }}
+              </p>
             </div>
-            <div>
+            <div v-if="form.protocol !== 'youka'">
               <label class="mb-1.5 block text-xs font-medium text-muted-foreground">{{ t('siteConnections.form.callbackUrl') }}</label>
               <Input v-model="form.callback_url" :placeholder="t('siteConnections.form.callbackUrlPlaceholder')" />
             </div>

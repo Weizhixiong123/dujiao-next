@@ -113,18 +113,20 @@ type CreateUpstreamOrderReq struct {
 	DownstreamOrderNo string       `json:"downstream_order_no"`
 	TraceID           string       `json:"trace_id"`
 	CallbackURL       string       `json:"callback_url"`
+	PreparedOrder     string       `json:"-"`
 }
 
 // CreateUpstreamOrderResp 创建上游采购单响应
 type CreateUpstreamOrderResp struct {
-	OK           bool   `json:"ok"`
-	OrderID      uint   `json:"order_id,omitempty"`
-	OrderNo      string `json:"order_no,omitempty"`
-	Status       string `json:"status,omitempty"`
-	Amount       string `json:"amount,omitempty"`
-	Currency     string `json:"currency,omitempty"`
-	ErrorCode    string `json:"error_code,omitempty"`
-	ErrorMessage string `json:"error_message,omitempty"`
+	OK           bool                 `json:"ok"`
+	OrderID      uint                 `json:"order_id,omitempty"`
+	OrderNo      string               `json:"order_no,omitempty"`
+	Status       string               `json:"status,omitempty"`
+	Amount       string               `json:"amount,omitempty"`
+	Currency     string               `json:"currency,omitempty"`
+	ErrorCode    string               `json:"error_code,omitempty"`
+	ErrorMessage string               `json:"error_message,omitempty"`
+	Fulfillment  *UpstreamFulfillment `json:"-"`
 }
 
 // UpstreamFulfillment 上游交付信息
@@ -167,7 +169,7 @@ type Adapter interface {
 	CreateOrder(ctx context.Context, req CreateUpstreamOrderReq) (*CreateUpstreamOrderResp, error)
 
 	// GetOrder 查询上游订单状态
-	GetOrder(ctx context.Context, orderID uint) (*UpstreamOrderDetail, error)
+	GetOrder(ctx context.Context, orderID uint, orderNo ...string) (*UpstreamOrderDetail, error)
 
 	// CancelOrder 取消采购单
 	CancelOrder(ctx context.Context, orderID uint) error
@@ -181,6 +183,8 @@ func NewAdapter(conn *siteconnectiondomain.Connection, uploadsDir string) (Adapt
 	switch conn.Protocol {
 	case constants.ConnectionProtocolDujiaoNext:
 		return NewDujiaoNextAdapter(conn, uploadsDir), nil
+	case constants.ConnectionProtocolYouka:
+		return newYoukaAdapter(conn, uploadsDir)
 	default:
 		return nil, fmt.Errorf("unsupported protocol: %s", conn.Protocol)
 	}

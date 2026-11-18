@@ -34,6 +34,7 @@ type CreateOrderRequest struct {
 	DownstreamOrderNo string
 	TraceID           string
 	CallbackURL       string
+	PreparedOrder     string
 }
 
 type CreateOrderResult struct {
@@ -45,6 +46,7 @@ type CreateOrderResult struct {
 	Currency     string
 	ErrorCode    string
 	ErrorMessage string
+	Fulfillment  *Fulfillment
 }
 
 type UpstreamOrder struct {
@@ -63,8 +65,13 @@ type UpstreamConnection interface {
 	RetryMax() int
 	RetryIntervals() string
 	CreateOrder(ctx context.Context, request CreateOrderRequest) (*CreateOrderResult, error)
-	GetOrder(ctx context.Context, orderID uint) (*UpstreamOrder, error)
+	GetOrder(ctx context.Context, orderID uint, orderNo ...string) (*UpstreamOrder, error)
 	CancelOrder(ctx context.Context, orderID uint) error
+}
+
+// OrderPreparer snapshots the quote and request before the first charge attempt.
+type OrderPreparer interface {
+	PrepareOrder(ctx context.Context, request CreateOrderRequest, maxAmount, currency string) (string, error)
 }
 
 // UseCase 是支付、HTTP、上游回调与 Worker 共享的正式采购应用契约。
