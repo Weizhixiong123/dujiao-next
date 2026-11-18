@@ -495,7 +495,85 @@ func newRedirectResult(endpoint, payType string, params map[string]string) *Crea
 	}
 }
 
+// RequestPaymentVerification asks PerPay to schedule reconciliation. Its
+// response acknowledges the request and is never used as proof of payment.
+func RequestPaymentVerification(ctx context.Context, cfg *Config, tradeNo, orderNo string) error {
+	return requestPaymentVerification(ctx, cfg, tradeNo, orderNo, nil)
+}
+
+func requestPaymentVerification(ctx context.Context, cfg *Config, tradeNo, orderNo string, transport http.RoundTripper) error {
+	if tradeNo == "" || orderNo == "" || tradeNo == orderNo || strings.ContainsAny(tradeNo+orderNo+cfg.MerchantID, "&") {
+		return ErrConfigInvalid
+	}
+	origin, err := url.Parse(cfg.GatewayURL)
+	if err != nil || origin.Scheme != "https" || origin.Host == "" || origin.User != nil ||
+		origin.RawQuery != "" || origin.Fragment != "" || (origin.Path != "" && origin.Path != "/") {
+		return ErrConfigInvalid
+	}
+	origin.Path = "/api/pay/check"
+	origin.RawPath = ""
+	var randomID [16]byte
+	if _, err := rand.Read(randomID[:]); err != nil {
+		return ErrRequestFailed
+	}
+	params := map[string]string{
+		"pid": cfg.MerchantID, "trade_no": tradeNo, "out_trade_no": orderNo,
+		"action": "check_payment", "request_id": hex.EncodeToString(randomID[:]),
+		"timestamp": strconv.FormatInt(time.Now().Unix(), 10),
+	}
+	params["sign"], err = signRSA(buildSignContent(params), cfg.PrivateKey)
+	if err != nil {
+		return ErrSignatureGenerate
+	}
+	params["sign_type"] = epaySignTypeRSA
+	client := &http.Client{Transport: transport, Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	body, err := postFormWithClient(ctx, client, origin.String(), params, 16*1024)
+	if err != nil {
+		return ErrRequestFailed
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.UseNumber()
+	var fields map[string]any
+	if err := decoder.Decode(&fields); err != nil || decoder.Decode(new(any)) != io.EOF {
+		return ErrResponseInvalid
+	}
+	signed := make(map[string]string, len(fields))
+	for name, value := range fields {
+		switch v := value.(type) {
+		case string:
+			signed[name] = v
+		case json.Number:
+			signed[name] = v.String()
+		default:
+			return ErrResponseInvalid
+		}
+		if strings.ContainsAny(name, "&=") || strings.Contains(signed[name], "&") {
+			return ErrResponseInvalid
+		}
+	}
+	if signed["sign_type"] != epaySignTypeRSA || verifyRSA(buildSignContent(signed), signed["sign"], cfg.PublicKey) != nil {
+		return ErrSignatureInvalid
+	}
+	stamp, err := strconv.ParseInt(signed["timestamp"], 10, 64)
+	now := time.Now().Unix()
+	if err != nil || stamp < now-300 || stamp > now+300 || signed["code"] != "0" {
+		return ErrResponseInvalid
+	}
+	for _, field := range []string{"pid", "trade_no", "out_trade_no", "action", "request_id"} {
+		if signed[field] != params[field] {
+			return ErrResponseInvalid
+		}
+	}
+	return nil
+}
+
 func postForm(ctx context.Context, endpoint string, params map[string]string) ([]byte, error) {
+	return postFormWithClient(ctx, &http.Client{Timeout: 10 * time.Second}, endpoint, params, 0)
+}
+
+func postFormWithClient(ctx context.Context, client *http.Client, endpoint string, params map[string]string, limit int64) ([]byte, error) {
 	values := url.Values{}
 	for k, v := range params {
 		if v == "" {
@@ -512,7 +590,6 @@ func postForm(ctx context.Context, endpoint string, params map[string]string) ([
 	req.Header.Set("Accept-Encoding", "identity")
 	req.Header.Set("Accept-Language", epayHeaderAcceptLanguage)
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -521,9 +598,16 @@ func postForm(ctx context.Context, endpoint string, params map[string]string) ([
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, ErrRequestFailed
 	}
-	body, err := io.ReadAll(resp.Body)
+	var reader io.Reader = resp.Body
+	if limit > 0 {
+		reader = io.LimitReader(reader, limit+1)
+	}
+	body, err := io.ReadAll(reader)
 	if err != nil {
 		return nil, err
+	}
+	if limit > 0 && int64(len(body)) > limit {
+		return nil, ErrResponseInvalid
 	}
 	return body, nil
 }

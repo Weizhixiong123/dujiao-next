@@ -47,6 +47,29 @@ func (s *PaymentService) CapturePayment(input CapturePaymentInput) (*paymentdoma
 	}
 
 	providerType := strings.ToLower(strings.TrimSpace(channel.ProviderType))
+	if providerType == constants.PaymentProviderEpay {
+		if payment.ProviderType != providerType || payment.Status != constants.PaymentStatusPending ||
+			payment.ProviderPayload["perpay_inline"] != true || payment.SupersededAt != nil ||
+			(payment.ExpiredAt != nil && !payment.ExpiredAt.After(time.Now())) {
+			return nil, ErrPaymentStatusInvalid
+		}
+		if s.paymentProviderRegistry == nil {
+			return nil, ErrPaymentProviderNotSupported
+		}
+		provider, ok := s.paymentProviderRegistry.Lookup(channel.ProviderType, channel.ChannelType)
+		if !ok {
+			return nil, ErrPaymentProviderNotSupported
+		}
+		verifier, ok := provider.(paymentcontract.GatewayPaymentVerifier)
+		if !ok {
+			return nil, ErrPaymentProviderNotSupported
+		}
+		if err := verifier.RequestPaymentVerification(input.Context, channel.ConfigJSON, payment.ProviderRef, payment.GatewayOrderNo); err != nil {
+			return nil, mapProviderErrorToService(err)
+		}
+		// Only the verified async payment notification advances this payment.
+		return s.GetPayment(payment.ID)
+	}
 	if providerType != constants.PaymentProviderOfficial {
 		return nil, ErrPaymentProviderNotSupported
 	}

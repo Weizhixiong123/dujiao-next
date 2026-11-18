@@ -35,6 +35,17 @@ type epayAdapter struct{}
 // NewEpayAdapter 实例化 epay adapter。
 func NewEpayAdapter() paymentcontract.GatewayProvider { return &epayAdapter{} }
 
+func (a *epayAdapter) RequestPaymentVerification(ctx context.Context, raw jsonmap.JSON, providerRef, gatewayOrderNo string) error {
+	cfg, err := a.parseConfig(raw)
+	if err != nil {
+		return err
+	}
+	if !cfg.PerpayInline || cfg.EpayVersion != epay.VersionV2 {
+		return paymentcontract.ErrGatewayUnsupportedChannel
+	}
+	return mapEpayError(epay.RequestPaymentVerification(ctx, cfg, providerRef, gatewayOrderNo))
+}
+
 // 编译期断言 epayAdapter 实现了 paymentcontract.GatewayProvider 和 paymentcontract.GatewayCallbackVerifier。
 var (
 	_ paymentcontract.GatewayProvider         = (*epayAdapter)(nil)

@@ -677,14 +677,15 @@ export function usePayment() {
     countdownTimer.value = null
   }
 
-  const shouldCaptureCurrentPayment = () => {
+  const shouldCaptureCurrentPayment = (manual = false) => {
     if (!currentPaymentID()) return false
     if (!order.value || order.value.status !== 'pending_payment') return false
-    return paymentProviderType.value === 'official' && paymentChannelType.value === 'wechat'
+    return (manual && paymentProviderType.value === 'epay' && paymentResult.value?.perpay_inline === true)
+      || (paymentProviderType.value === 'official' && paymentChannelType.value === 'wechat')
   }
 
-  const captureCurrentPayment = async (options?: { silent?: boolean }) => {
-    if (capturing.value || !shouldCaptureCurrentPayment()) return
+  const captureCurrentPayment = async (options?: { silent?: boolean; manual?: boolean }) => {
+    if (capturing.value || !shouldCaptureCurrentPayment(options?.manual)) return
     capturing.value = true
     if (!options?.silent) {
       error.value = ''
@@ -710,6 +711,7 @@ export function usePayment() {
       if (!options?.silent) {
         error.value = err?.message || t('payment.captureFailed')
       }
+      return false
     } finally {
       capturing.value = false
     }
@@ -729,13 +731,19 @@ export function usePayment() {
     pollTimer.value = null
   }
 
-  // 「我已完成付款」只加快查询订单状态，到账仍以后端确认（网关回调 / 主动查单）为准。
+  // PerPay reconciliation is requested only by this explicit action.
   const handleConfirmPaid = async () => {
     if (confirmingPayment.value || !paymentResult.value || order.value?.status !== 'pending_payment') return
     confirmingPayment.value = true
     stopPolling()
     startPolling()
-    await captureCurrentPayment({ silent: true })
+    const perpay = paymentResult.value?.perpay_inline === true
+    const result = await captureCurrentPayment({ manual: true, silent: !perpay })
+    if (perpay && result === false && !paymentConfirmed.value) {
+      confirmingPayment.value = false
+      stopPolling()
+      startPolling()
+    }
     await debouncedLoadOrder({ silent: true })
   }
 

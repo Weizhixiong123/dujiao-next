@@ -84,6 +84,11 @@ type GatewayCapturer interface {
 	QueryPayment(ctx context.Context, cfg jsonmap.JSON, providerRef string) (*GatewayQueryResult, error)
 }
 
+// GatewayPaymentVerifier requests a check without settling the order.
+type GatewayPaymentVerifier interface {
+	RequestPaymentVerification(ctx context.Context, cfg jsonmap.JSON, providerRef, gatewayOrderNo string) error
+}
+
 type GatewayWebhooker interface {
 	GatewayProvider
 	ParseWebhook(ctx context.Context, cfg jsonmap.JSON, headers map[string]string, body []byte, now time.Time) (*GatewayCallbackResult, error)
