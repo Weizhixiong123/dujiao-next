@@ -6,6 +6,7 @@ import { debounceAsync } from '../utils/debounce'
 import { clearGuestOrderAuth, loadGuestOrderAuth, saveGuestOrderAuth } from '../utils/guestOrderAuth'
 import { resolveGuestOrderDetailViewState } from '../utils/guestOrderDetailState'
 import { useOrderDisplayHelpers } from './useOrderDisplayHelpers'
+import { useOrderDeliveryPolling } from './useOrderDeliveryPolling'
 
 /**
  * 游客订单详情逻辑（classic + vault 共用）。
@@ -58,10 +59,12 @@ export function useGuestOrderDetail() {
     showAuthForm: showAuthForm.value,
   }))
 
-  const loadOrder = async () => {
-    loading.value = true
+  const loadOrder = async (options?: { silent?: boolean }) => {
+    const silent = options?.silent === true
+    if (!silent) loading.value = true
     try {
       if (!hasAuth.value) {
+        if (silent) return
         order.value = null
         authError.value = t('guestOrderDetail.authRequired')
         return
@@ -73,12 +76,16 @@ export function useGuestOrderDetail() {
       order.value = response.data.data
       authError.value = ''
     } catch (error) {
+      // 静默刷新失败时保留已展示的订单，等待下一轮。
+      if (silent) return
       order.value = null
       authError.value = t('guestOrderDetail.authInvalid')
     } finally {
-      loading.value = false
+      if (!silent) loading.value = false
     }
   }
+
+  useOrderDeliveryPolling(order, () => loadOrder({ silent: true }))
 
   const debouncedLoadOrder = debounceAsync(loadOrder, 300)
 

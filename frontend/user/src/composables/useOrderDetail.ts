@@ -6,6 +6,7 @@ import { debounceAsync } from '../utils/debounce'
 import { useConfirmDialog } from './useConfirmDialog'
 import { toast } from './useToast'
 import { useOrderDisplayHelpers } from './useOrderDisplayHelpers'
+import { useOrderDeliveryPolling } from './useOrderDeliveryPolling'
 
 /**
  * 已登录用户订单详情逻辑（classic + vault 共用）。
@@ -39,17 +40,21 @@ export function useOrderDetail() {
     }
   }
 
-  const loadOrder = async () => {
-    loading.value = true
+  const loadOrder = async (options?: { silent?: boolean }) => {
+    const silent = options?.silent === true
+    if (!silent) loading.value = true
     try {
       const response = await userOrderAPI.detail(String(route.params.order_no || '').trim())
       order.value = response.data.data
     } catch (error) {
-      order.value = null
+      // 静默刷新失败时保留已展示的订单，等待下一轮。
+      if (!silent) order.value = null
     } finally {
-      loading.value = false
+      if (!silent) loading.value = false
     }
   }
+
+  useOrderDeliveryPolling(order, () => loadOrder({ silent: true }))
 
   const debouncedLoadOrder = debounceAsync(loadOrder, 300)
 
