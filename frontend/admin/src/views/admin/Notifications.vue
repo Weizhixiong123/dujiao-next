@@ -67,6 +67,12 @@ const notificationData = reactive({
       receive_id_type: 'chat_id',
       recipients_text: '',
     },
+    wecom: {
+      enabled: false,
+      webhooks_text: '',
+      webhook_labels: [] as string[],
+      webhook_count: 0,
+    },
   },
   scenes: {
     wallet_recharge_success: true,
@@ -149,6 +155,10 @@ const currentChannelTargets = computed(() => {
   if (testForm.channel === 'feishu') {
     return splitRecipients(notificationData.channels.feishu.recipients_text)
   }
+  if (testForm.channel === 'wecom') {
+    // 已配置的 Webhook 以脱敏标识展示，后端据此匹配；也可直接粘贴新的 Webhook 地址测试。
+    return [...notificationData.channels.wecom.webhook_labels]
+  }
   return splitRecipients(notificationData.channels.email.recipients_text)
 })
 
@@ -186,6 +196,7 @@ const fetchSettings = async () => {
     const notifEmail = notifChannels?.email
     const notifTelegram = notifChannels?.telegram
     const notifFeishu = notifChannels?.feishu
+    const notifWeCom = notifChannels?.wecom
     notificationData.channels.email.enabled = !!notifEmail?.enabled
     notificationData.channels.email.recipients_text = joinRecipients(notifEmail?.recipients)
     notificationData.channels.telegram.enabled = !!notifTelegram?.enabled
@@ -196,6 +207,12 @@ const fetchSettings = async () => {
     notificationData.channels.feishu.has_app_secret = !!notifFeishu?.has_app_secret
     notificationData.channels.feishu.receive_id_type = String(notifFeishu?.receive_id_type || 'chat_id')
     notificationData.channels.feishu.recipients_text = joinRecipients(notifFeishu?.recipients)
+    notificationData.channels.wecom.enabled = !!notifWeCom?.enabled
+    notificationData.channels.wecom.webhooks_text = ''
+    notificationData.channels.wecom.webhook_labels = Array.isArray(notifWeCom?.webhook_labels)
+      ? (notifWeCom?.webhook_labels as unknown[]).map((item) => String(item))
+      : []
+    notificationData.channels.wecom.webhook_count = normalizeNumber(notifWeCom?.webhook_count, 0)
 
     const notifScenes = notification.scenes as Record<string, unknown> | undefined
     notificationData.scenes.wallet_recharge_success = !!notifScenes?.wallet_recharge_success
@@ -268,6 +285,7 @@ const changeNotificationLogPage = (page: number) => {
 const notificationChannelLabel = (value: string) => {
   if (value === 'telegram') return t('admin.settings.notification.channels.telegram.title')
   if (value === 'feishu') return t('admin.settings.notification.channels.feishu.title')
+  if (value === 'wecom') return t('admin.settings.notification.channels.wecom.title')
   return t('admin.settings.notification.channels.email.title')
 }
 
@@ -369,6 +387,7 @@ onMounted(async () => {
               <SelectItem value="email">{{ t('admin.settings.notification.channels.email.title') }}</SelectItem>
               <SelectItem value="telegram">{{ t('admin.settings.notification.channels.telegram.title') }}</SelectItem>
               <SelectItem value="feishu">{{ t('admin.settings.notification.channels.feishu.title') }}</SelectItem>
+              <SelectItem value="wecom">{{ t('admin.settings.notification.channels.wecom.title') }}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -433,6 +452,7 @@ onMounted(async () => {
             <SelectItem value="email">{{ t('admin.settings.notification.channels.email.title') }}</SelectItem>
             <SelectItem value="telegram">{{ t('admin.settings.notification.channels.telegram.title') }}</SelectItem>
             <SelectItem value="feishu">{{ t('admin.settings.notification.channels.feishu.title') }}</SelectItem>
+            <SelectItem value="wecom">{{ t('admin.settings.notification.channels.wecom.title') }}</SelectItem>
           </SelectContent>
         </Select>
         <Select v-model="notificationLogFilters.status" @update:modelValue="handleNotificationLogSearch">

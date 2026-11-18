@@ -120,6 +120,30 @@ func (s *Service) SendTest(ctx context.Context, input contract.TestSendInput) er
 			sendErr:   sendErr,
 		})
 		return sendErr
+	case constants.NotificationChannelWeCom:
+		// 目标可以是新粘贴的 Webhook 地址 / key，或已配置项的脱敏标识；日志只记录脱敏标识。
+		webhookKey, ok := settingsmessaging.ResolveWeComWebhookTarget(target, setting.Channels.WeCom.WebhookKeys)
+		if !ok {
+			return contract.ErrConfigInvalid
+		}
+		sendErr := contract.ErrSendFailed
+		gatewayCtx, cancel := detachOutboundRequestContext(ctx)
+		defer cancel()
+		if s.wecomSender != nil {
+			sendErr = s.wecomSender.SendMessage(gatewayCtx, webhookKey, format.ComposePlainTextMessage(title, body))
+		}
+		s.recordSendAttempt(notificationSendAttempt{
+			eventType: scene,
+			channel:   channel,
+			recipient: settingsmessaging.MaskWeComWebhookKey(webhookKey),
+			locale:    locale,
+			title:     title,
+			body:      body,
+			variables: variables,
+			isTest:    true,
+			sendErr:   sendErr,
+		})
+		return sendErr
 	default:
 		return contract.ErrConfigInvalid
 	}
@@ -248,6 +272,42 @@ func (s *Service) dispatchSingleEvent(ctx context.Context, setting settingsmessa
 			})
 			if sendErr != nil {
 				logger.Warnw("notification_feishu_send_failed",
+					"event_type", payload.EventType,
+					"biz_type", payload.BizType,
+					"biz_id", payload.BizID,
+					"recipient", recipient,
+					"error", sendErr,
+				)
+				if firstErr == nil {
+					firstErr = sendErr
+				}
+			}
+		}
+	}
+	if setting.Channels.WeCom.Enabled && len(setting.Channels.WeCom.WebhookKeys) > 0 {
+		message := format.ComposePlainTextMessage(title, body)
+		for _, webhookKey := range setting.Channels.WeCom.WebhookKeys {
+			recipient := settingsmessaging.MaskWeComWebhookKey(webhookKey)
+			var sendErr error
+			if s.wecomSender == nil {
+				sendErr = contract.ErrSendFailed
+			} else {
+				sendErr = s.wecomSender.SendMessage(ctx, webhookKey, message)
+			}
+			s.recordSendAttempt(notificationSendAttempt{
+				eventType: payload.EventType,
+				bizType:   payload.BizType,
+				bizID:     payload.BizID,
+				channel:   constants.NotificationChannelWeCom,
+				recipient: recipient,
+				locale:    locale,
+				title:     title,
+				body:      body,
+				variables: variables,
+				sendErr:   sendErr,
+			})
+			if sendErr != nil {
+				logger.Warnw("notification_wecom_send_failed",
 					"event_type", payload.EventType,
 					"biz_type", payload.BizType,
 					"biz_id", payload.BizID,

@@ -19,6 +19,7 @@ type Service struct {
 	logService     *LogService
 	telegramSender contract.TelegramSender
 	feishuSender   contract.FeishuSender
+	wecomSender    contract.WeComSender
 }
 
 // NewService 创建通知中心服务。
@@ -30,6 +31,7 @@ func NewService(
 	logService *LogService,
 	telegramSender contract.TelegramSender,
 	feishuSender contract.FeishuSender,
+	wecomSender contract.WeComSender,
 ) *Service {
 	return &Service{
 		settingService: settingService,
@@ -39,6 +41,7 @@ func NewService(
 		logService:     logService,
 		telegramSender: telegramSender,
 		feishuSender:   feishuSender,
+		wecomSender:    wecomSender,
 	}
 }
 

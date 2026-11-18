@@ -71,6 +71,7 @@ type NotificationChannelsSetting struct {
 	Email    NotificationChannelSetting       `json:"email"`
 	Telegram NotificationChannelSetting       `json:"telegram"`
 	Feishu   FeishuNotificationChannelSetting `json:"feishu"`
+	WeCom    WeComNotificationChannelSetting  `json:"wecom"`
 }
 
 // NotificationSceneSetting 通知场景开关
@@ -133,6 +134,7 @@ type NotificationChannelsPatch struct {
 	Email    *NotificationChannelPatch       `json:"email"`
 	Telegram *NotificationChannelPatch       `json:"telegram"`
 	Feishu   *FeishuNotificationChannelPatch `json:"feishu"`
+	WeCom    *WeComNotificationChannelPatch  `json:"wecom"`
 }
 
 // NotificationChannelPatch 通知渠道补丁
@@ -196,6 +198,10 @@ func NotificationCenterDefaultSetting() NotificationCenterSetting {
 				Enabled:       false,
 				ReceiveIDType: FeishuReceiveIDTypeChatID,
 				Recipients:    []string{},
+			},
+			WeCom: WeComNotificationChannelSetting{
+				Enabled:     false,
+				WebhookKeys: []string{},
 			},
 		},
 		Scenes: NotificationSceneSetting{
@@ -279,6 +285,7 @@ func NormalizeNotificationCenterSetting(setting NotificationCenterSetting) Notif
 	setting.Channels.Feishu.AppSecret = strings.TrimSpace(setting.Channels.Feishu.AppSecret)
 	setting.Channels.Feishu.ReceiveIDType = normalizeFeishuReceiveIDType(setting.Channels.Feishu.ReceiveIDType)
 	setting.Channels.Feishu.Recipients = normalizeFeishuRecipients(setting.Channels.Feishu.Recipients, setting.Channels.Feishu.ReceiveIDType)
+	setting.Channels.WeCom.WebhookKeys = normalizeWeComWebhookKeys(setting.Channels.WeCom.WebhookKeys)
 	setting.DedupeTTLSeconds = normalizeNotificationDedupeTTL(setting.DedupeTTLSeconds)
 	setting.InventoryAlertIntervalSeconds = NormalizeNotificationInventoryAlertInterval(setting.InventoryAlertIntervalSeconds)
 	setting.PaymentOrderAlertIntervalSeconds = NormalizeNotificationPaymentOrderAlertInterval(setting.PaymentOrderAlertIntervalSeconds)
@@ -303,6 +310,9 @@ func ValidateNotificationCenterSetting(setting NotificationCenterSetting) error 
 	}
 	if normalized.Channels.Feishu.Enabled && len(normalized.Channels.Feishu.Recipients) == 0 {
 		return fmt.Errorf("%w: 飞书渠道已启用但未配置接收人ID", ErrNotificationConfigInvalid)
+	}
+	if normalized.Channels.WeCom.Enabled && len(normalized.Channels.WeCom.WebhookKeys) == 0 {
+		return fmt.Errorf("%w: 企业微信渠道已启用但未配置群机器人 Webhook", ErrNotificationConfigInvalid)
 	}
 	if normalized.Channels.Email.Enabled {
 		for _, recipient := range normalized.Channels.Email.Recipients {
@@ -373,6 +383,10 @@ func NotificationCenterSettingToMap(setting NotificationCenterSetting) map[strin
 				"receive_id_type": normalized.Channels.Feishu.ReceiveIDType,
 				"recipients":      settingsvalue.CloneStringSlice(normalized.Channels.Feishu.Recipients),
 			},
+			"wecom": map[string]interface{}{
+				"enabled":      normalized.Channels.WeCom.Enabled,
+				"webhook_keys": settingsvalue.CloneStringSlice(normalized.Channels.WeCom.WebhookKeys),
+			},
 		},
 		"scenes": map[string]interface{}{
 			"wallet_recharge_success":    normalized.Scenes.WalletRechargeSuccess,
@@ -402,12 +416,16 @@ func MaskNotificationCenterSettingForAdmin(setting NotificationCenterSetting) js
 	if channels == nil {
 		return result
 	}
-	feishu := settingsvalue.ToStringAnyMap(channels["feishu"])
-	if feishu == nil {
-		return result
+	if feishu := settingsvalue.ToStringAnyMap(channels["feishu"]); feishu != nil {
+		feishu["app_secret"] = ""
+		feishu["has_app_secret"] = normalized.Channels.Feishu.AppSecret != ""
 	}
-	feishu["app_secret"] = ""
-	feishu["has_app_secret"] = normalized.Channels.Feishu.AppSecret != ""
+	if wecom := settingsvalue.ToStringAnyMap(channels["wecom"]); wecom != nil {
+		// Webhook key 等同于发送凭据，管理端只返回脱敏标识。
+		wecom["webhook_keys"] = []string{}
+		wecom["webhook_labels"] = weComWebhookLabels(normalized.Channels.WeCom.WebhookKeys)
+		wecom["webhook_count"] = len(normalized.Channels.WeCom.WebhookKeys)
+	}
 	return result
 }
 
@@ -466,6 +484,20 @@ func ApplyNotificationCenterSettingPatch(current NotificationCenterSetting, patc
 			}
 			if patch.Channels.Feishu.Recipients != nil {
 				next.Channels.Feishu.Recipients = settingsvalue.CloneStringSlice(*patch.Channels.Feishu.Recipients)
+			}
+		}
+		if patch.Channels.WeCom != nil {
+			if patch.Channels.WeCom.Enabled != nil {
+				next.Channels.WeCom.Enabled = *patch.Channels.WeCom.Enabled
+			}
+			if patch.Channels.WeCom.WebhookKeys != nil {
+				keys, ok := parseWeComWebhookKeysInput(*patch.Channels.WeCom.WebhookKeys)
+				if !ok {
+					return NotificationCenterSetting{}, fmt.Errorf("%w: 企业微信群机器人 Webhook 地址不合法", ErrNotificationConfigInvalid)
+				}
+				if len(keys) > 0 {
+					next.Channels.WeCom.WebhookKeys = keys
+				}
 			}
 		}
 	}
@@ -579,6 +611,10 @@ func DecodeNotificationCenterSetting(raw jsonmap.JSON, fallback NotificationCent
 			next.Channels.Feishu.ReceiveIDType = settingsvalue.ReadString(feishuMap, "receive_id_type", next.Channels.Feishu.ReceiveIDType)
 			next.Channels.Feishu.Recipients = settingsvalue.ReadStringList(feishuMap, "recipients", next.Channels.Feishu.Recipients)
 		}
+		if wecomMap := settingsvalue.ToStringAnyMap(channelsMap["wecom"]); wecomMap != nil {
+			next.Channels.WeCom.Enabled = settingsvalue.ReadBool(wecomMap, "enabled", next.Channels.WeCom.Enabled)
+			next.Channels.WeCom.WebhookKeys = settingsvalue.ReadStringList(wecomMap, "webhook_keys", next.Channels.WeCom.WebhookKeys)
+		}
 	}
 
 	if scenesMap := settingsvalue.ToStringAnyMap(raw["scenes"]); scenesMap != nil {
@@ -606,6 +642,7 @@ func DecodeNotificationCenterSetting(raw jsonmap.JSON, fallback NotificationCent
 		next.Channels.Email.Enabled = false
 		next.Channels.Telegram.Enabled = false
 		next.Channels.Feishu.Enabled = false
+		next.Channels.WeCom.Enabled = false
 	}
 
 	return next

@@ -119,7 +119,7 @@ func setupLogService(t *testing.T) (*Service, *LogService) {
 			},
 		},
 	}
-	service := NewService(notificationSettingsStub{notification: setting}, notificationEmailStub{}, nil, nil, logService, nil, nil)
+	service := NewService(notificationSettingsStub{notification: setting}, notificationEmailStub{}, nil, nil, logService, nil, nil, nil)
 	return service, logService
 }
 
@@ -204,7 +204,7 @@ func TestServiceDispatchSingleEventSendsFeishuAndRecordsEachRecipient(t *testing
 		ReceiveIDType: settingsmessaging.FeishuReceiveIDTypeChatID,
 		Recipients:    []string{"oc_success", "oc_failure"},
 	}
-	service := NewService(notificationSettingsStub{notification: setting}, nil, nil, nil, logService, nil, feishuSender)
+	service := NewService(notificationSettingsStub{notification: setting}, nil, nil, nil, logService, nil, feishuSender, nil)
 
 	err := service.dispatchSingleEvent(context.Background(), setting, queue.NotificationDispatchPayload{
 		EventType: constants.NotificationEventOrderPaidSuccess,
@@ -246,5 +246,57 @@ func TestServiceDispatchSingleEventSendsFeishuAndRecordsEachRecipient(t *testing
 	}
 	if statuses["oc_success"] != notificationLogStatusSuccess || statuses["oc_failure"] != notificationLogStatusFailed {
 		t.Fatalf("unexpected feishu log statuses: %#v", statuses)
+	}
+}
+
+type notificationWeComStub struct {
+	keys     []string
+	messages []string
+}
+
+func (s *notificationWeComStub) SendMessage(_ context.Context, webhookKey, message string) error {
+	s.keys = append(s.keys, webhookKey)
+	s.messages = append(s.messages, message)
+	if strings.HasPrefix(webhookKey, "failure") {
+		return errors.New("simulated wecom failure")
+	}
+	return nil
+}
+
+func TestServiceDispatchSingleEventSendsWeComAndLogsMaskedWebhook(t *testing.T) {
+	logService := NewLogService(&notificationLogRepositoryStub{})
+	wecomSender := &notificationWeComStub{}
+	setting := settingsmessaging.NotificationCenterDefaultSetting()
+	setting.DefaultLocale = constants.LocaleZhCN
+	setting.Channels.WeCom = settingsmessaging.WeComNotificationChannelSetting{
+		Enabled:     true,
+		WebhookKeys: []string{"success-key-0001", "failure-key-0002"},
+	}
+	service := NewService(notificationSettingsStub{notification: setting}, nil, nil, nil, logService, nil, nil, wecomSender)
+
+	err := service.dispatchSingleEvent(context.Background(), setting, queue.NotificationDispatchPayload{
+		EventType: constants.NotificationEventOrderPaidSuccess,
+		BizType:   constants.NotificationBizTypeOrder,
+		BizID:     100,
+		Locale:    constants.LocaleZhCN,
+		Force:     true,
+		Data:      map[string]interface{}{"order_no": "DJ-WECOM-100"},
+	})
+	if !errors.Is(err, contract.ErrSendFailed) {
+		t.Fatalf("expected one wecom failure, got %v", err)
+	}
+	if len(wecomSender.keys) != 2 || !strings.Contains(wecomSender.messages[0], "DJ-WECOM-100") {
+		t.Fatalf("unexpected wecom calls: %#v", wecomSender)
+	}
+	items, total, listErr := logService.ListForAdmin(contract.LogListFilter{
+		Page: 1, PageSize: 10, Channel: constants.NotificationChannelWeCom,
+	})
+	if listErr != nil || total != 2 {
+		t.Fatalf("list wecom logs: total=%d err=%v", total, listErr)
+	}
+	for _, item := range items {
+		if strings.Contains(item.Recipient, "-key-") {
+			t.Fatalf("webhook key leaked into notification log: %q", item.Recipient)
+		}
 	}
 }

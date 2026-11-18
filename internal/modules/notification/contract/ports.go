@@ -59,6 +59,11 @@ type FeishuSender interface {
 	SendMessage(ctx context.Context, appID, appSecret, receiveIDType, receiveID, message string) error
 }
 
+// WeComSender 企业微信群机器人发送器，webhookKey 为群机器人 Webhook 的 key。
+type WeComSender interface {
+	SendMessage(ctx context.Context, webhookKey, message string) error
+}
+
 type LogRepository interface {
 	Create(log *domain.NotificationLog) error
 	ListAdmin(filter LogListFilter) ([]domain.NotificationLog, int64, error)

@@ -44,6 +44,12 @@ interface NotificationData {
       receive_id_type: string
       recipients_text: string
     }
+    wecom: {
+      enabled: boolean
+      webhooks_text: string
+      webhook_labels: string[]
+      webhook_count: number
+    }
   }
   scenes: {
     wallet_recharge_success: boolean
@@ -115,6 +121,11 @@ const form = reactive({
       receive_id_type: 'chat_id',
       recipients_text: '',
     },
+    wecom: {
+      enabled: false,
+      webhooks_text: '',
+      webhook_count: 0,
+    },
   },
   scenes: {
     wallet_recharge_success: true,
@@ -147,6 +158,9 @@ const syncFromProps = () => {
   form.channels.feishu.has_app_secret = props.data.channels.feishu.has_app_secret
   form.channels.feishu.receive_id_type = props.data.channels.feishu.receive_id_type || 'chat_id'
   form.channels.feishu.recipients_text = props.data.channels.feishu.recipients_text
+  form.channels.wecom.enabled = props.data.channels.wecom.enabled
+  form.channels.wecom.webhooks_text = ''
+  form.channels.wecom.webhook_count = props.data.channels.wecom.webhook_count
   Object.assign(form.scenes, props.data.scenes)
   form.templates.wallet_recharge_success = deepCloneTemplate(props.data.templates.wallet_recharge_success)
   form.templates.order_paid_success = deepCloneTemplate(props.data.templates.order_paid_success)
@@ -159,6 +173,13 @@ syncFromProps()
 const splitRecipients = (raw: string) => {
   return raw
     .split(/\r?\n|,/)
+    .map((item) => item.trim())
+    .filter((item) => item !== '')
+}
+
+const splitWebhookLines = (raw: string) => {
+  return raw
+    .split(/\r?\n/)
     .map((item) => item.trim())
     .filter((item) => item !== '')
 }
@@ -287,6 +308,11 @@ const save = async () => {
           app_secret: form.channels.feishu.app_secret.trim(),
           receive_id_type: form.channels.feishu.receive_id_type,
           recipients: splitRecipients(form.channels.feishu.recipients_text),
+        },
+        wecom: {
+          enabled: form.channels.wecom.enabled,
+          // 留空表示保持已保存的 Webhook 不变（后端不返回明文）。
+          webhook_keys: splitWebhookLines(form.channels.wecom.webhooks_text),
         },
       },
       scenes: {
@@ -513,6 +539,34 @@ defineExpose({ save, submitting })
                 </div>
               </div>
               <p class="text-xs text-muted-foreground">{{ t('admin.settings.notification.channels.feishu.permissionHint') }}</p>
+            </div>
+          </div>
+
+          <div class="rounded-xl border border-border md:col-span-2">
+            <div class="border-b border-border bg-muted/30 px-4 py-3">
+              <h3 class="text-sm font-semibold">{{ t('admin.settings.notification.channels.wecom.title') }}</h3>
+              <p class="mt-1 text-xs text-muted-foreground">{{ t('admin.settings.notification.channels.wecom.subtitle') }}</p>
+            </div>
+            <div class="space-y-4 p-4">
+              <div class="flex items-center gap-2">
+                <Switch v-model="form.channels.wecom.enabled" />
+                <Label class="text-sm">{{ t('admin.settings.notification.channels.wecom.enabled') }}</Label>
+              </div>
+              <div class="space-y-2">
+                <label class="text-xs font-medium text-muted-foreground">{{ t('admin.settings.notification.channels.wecom.webhooks') }}</label>
+                <Textarea
+                  v-model="form.channels.wecom.webhooks_text"
+                  rows="3"
+                  autocomplete="off"
+                  :placeholder="t('admin.settings.notification.channels.wecom.webhooksPlaceholder')"
+                />
+                <p class="text-xs text-muted-foreground">
+                  {{ form.channels.wecom.webhook_count > 0
+                    ? t('admin.settings.notification.channels.wecom.webhooksHintKeep', { count: form.channels.wecom.webhook_count })
+                    : t('admin.settings.notification.channels.wecom.webhooksHintEmpty') }}
+                </p>
+              </div>
+              <p class="text-xs text-muted-foreground">{{ t('admin.settings.notification.channels.wecom.setupHint') }}</p>
             </div>
           </div>
         </div>

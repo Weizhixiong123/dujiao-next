@@ -367,6 +367,7 @@ const (
 	NotificationChannelEmail    = "email"
 	NotificationChannelTelegram = "telegram"
 	NotificationChannelFeishu   = "feishu"
+	NotificationChannelWeCom    = "wecom"
 )
 
 // 通知中心异常阈值类型常量
