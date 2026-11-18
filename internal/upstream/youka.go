@@ -174,7 +174,9 @@ func (a *YoukaAdapter) catalog(ctx context.Context) ([]UpstreamProduct, error) {
 			product = &UpstreamProduct{
 				ID: row.ProductID, Slug: fmt.Sprintf("youka-%d", row.ProductID),
 				Title: jsonmap.JSON{"zh-CN": row.ProductName}, PriceAmount: price,
-				Currency: "CNY", FulfillmentType: constants.FulfillmentTypeUpstream, IsActive: true,
+				// FulfillmentType 是上游原始交付方式（用于店面展示）：Youka 下单即返回卡密，属于自动交付；
+				// 需人工确认条款的 SKU 已在上方过滤。本地商品仍按 upstream 采购交付。
+				Currency: "CNY", FulfillmentType: constants.FulfillmentTypeAuto, IsActive: true,
 			}
 			products[row.ProductID] = product
 		}
