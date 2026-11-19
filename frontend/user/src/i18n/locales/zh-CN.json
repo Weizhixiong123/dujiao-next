@@ -1194,6 +1194,11 @@
   },
   "payment": {
     "perpayExactAmountTip": "请按显示的实际应付金额付款，不要修改金额。付款后会自动更新订单状态。",
+    "perpayScanTitle": "请扫码支付",
+    "perpayScanExactHint": "请输入准确金额，多付或少付都无法自动到账",
+    "perpayExactAmountWarning": "请付款 {amount}，金额必须完全一致。",
+    "perpayExactAmountReason": "尾数用于识别你的订单，修改金额会导致无法自动到账。",
+    "orderAmountLabel": "订单金额",
     "confirmProgress": {
       "idleHint": "扫码付款完成后点击下方按钮，系统会加快确认到账并自动发货。",
       "action": "我已完成付款",

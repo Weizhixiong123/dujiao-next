@@ -1242,6 +1242,11 @@
   },
   "payment": {
     "perpayExactAmountTip": "請按顯示的實際應付金額付款，不要修改金額。付款後會自動更新訂單狀態。",
+    "perpayScanTitle": "請掃碼支付",
+    "perpayScanExactHint": "請輸入準確金額，多付或少付都無法自動到帳",
+    "perpayExactAmountWarning": "請付款 {amount}，金額必須完全一致。",
+    "perpayExactAmountReason": "尾數用於識別你的訂單，修改金額會導致無法自動到帳。",
+    "orderAmountLabel": "訂單金額",
     "confirmProgress": {
       "idleHint": "掃碼付款完成後點擊下方按鈕，系統會加快確認到賬並自動發貨。",
       "action": "我已完成付款",

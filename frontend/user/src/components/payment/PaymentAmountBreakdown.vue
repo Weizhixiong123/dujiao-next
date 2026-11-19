@@ -2,10 +2,17 @@
   <div class="bg-secondary border rounded-2xl p-4">
     <div class="text-xs uppercase tracking-wider text-muted-foreground">{{ t('payment.payableAmountLabel') }}</div>
     <div class="mt-1 text-2xl font-bold text-foreground">{{ payableAmountDisplay }}</div>
-    <p v-if="paymentResult.perpay_inline" class="mt-2 text-sm text-warning">{{ t('payment.perpayExactAmountTip') }}</p>
+    <div v-if="perpayExactAmount" class="mt-3 flex gap-2 rounded-xl border border-warning/50 bg-warning/10 p-3 text-sm text-warning">
+      <AlertTriangle class="mt-0.5 h-4 w-4 flex-none" aria-hidden="true" />
+      <div class="space-y-1">
+        <p class="font-semibold">{{ t('payment.perpayExactAmountWarning', { amount: `¥${perpayExactAmount}` }) }}</p>
+        <p class="text-xs">{{ t('payment.perpayExactAmountReason') }}</p>
+      </div>
+    </div>
+    <p v-else-if="paymentResult.perpay_inline" class="mt-2 text-sm text-warning">{{ t('payment.perpayExactAmountTip') }}</p>
     <div class="mt-4 space-y-2 text-xs">
       <div class="flex items-center justify-between gap-4">
-        <span class="text-muted-foreground">{{ t('orderDetail.amountTotal') }}</span>
+        <span class="text-muted-foreground">{{ perpayExactAmount ? t('payment.orderAmountLabel') : t('orderDetail.amountTotal') }}</span>
         <span class="font-semibold text-foreground">{{ formatMoney(order.total_amount, order.currency) }}</span>
       </div>
       <div v-if="hasDiscountAmount(order.discount_amount)" class="flex items-center justify-between gap-4">
@@ -48,9 +55,12 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { AlertTriangle } from 'lucide-vue-next'
+import { perpayCollectionAmount } from '../../utils/perpayInline'
 
-defineProps<{
+const props = defineProps<{
   order: any
   paymentResult: any
   customerFeeApplied: boolean
@@ -67,4 +77,5 @@ defineProps<{
 }>()
 
 const { t } = useI18n()
+const perpayExactAmount = computed(() => perpayCollectionAmount(props.paymentResult))
 </script>

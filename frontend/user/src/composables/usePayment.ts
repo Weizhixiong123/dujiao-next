@@ -203,6 +203,7 @@ export function usePayment() {
 
   const paymentResultTitle = computed(() => t(resolvePaymentResultTitleKey(interactionMode.value)))
   const paymentGuideTitle = computed(() => paymentPresentationMode.value === 'redirect' ? t('payment.redirectTitle') : t('payment.qrTitle'))
+  const perpayExactAmount = computed(() => perpayCollectionAmount(paymentResult.value))
   const paymentGuideTip = computed(() => perpayCollectionAmount(paymentResult.value) ? t('payment.perpayExactAmountTip') : paymentPresentationMode.value === 'redirect' ? t('payment.redirectTip') : t('payment.qrTip'))
 
   const showPayLink = computed(() => {
@@ -1462,6 +1463,7 @@ export function usePayment() {
     customerFeeApplied,
     customerFeeAmountDisplay,
     payableAmountDisplay,
+    perpayExactAmount,
     walletBalanceDisplay,
     expectedWalletPaidDisplay,
     expectedOnlinePayDisplay,

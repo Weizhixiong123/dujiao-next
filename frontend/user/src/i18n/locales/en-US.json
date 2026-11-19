@@ -1242,6 +1242,11 @@
   },
   "payment": {
     "perpayExactAmountTip": "Pay the exact amount displayed without changing it. Your order status updates automatically after payment.",
+    "perpayScanTitle": "Scan to pay",
+    "perpayScanExactHint": "Enter the exact amount. Overpaying or underpaying cannot be matched automatically.",
+    "perpayExactAmountWarning": "Pay exactly {amount}. The amount must match.",
+    "perpayExactAmountReason": "The cents identify your order. Changing the amount prevents automatic confirmation.",
+    "orderAmountLabel": "Order amount",
     "confirmProgress": {
       "idleHint": "After paying, tap the button below and we'll confirm your payment faster and deliver automatically.",
       "action": "I've completed payment",

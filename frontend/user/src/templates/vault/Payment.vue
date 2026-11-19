@@ -53,7 +53,14 @@
         <div>
           <!-- QR -->
           <div v-if="showQRCode" class="flex flex-col items-center rounded-xl border bg-secondary p-[22px] text-center">
-            <div class="mb-3 text-[13px] text-muted-foreground">{{ paymentGuideTitle }}</div>
+            <div v-if="perpayExactAmount" class="mb-3">
+              <div class="text-[15px] font-semibold text-foreground">
+                {{ t('payment.perpayScanTitle') }}
+                <span class="ml-1 text-2xl font-extrabold text-destructive tabular-nums">¥{{ perpayExactAmount }}</span>
+              </div>
+              <div class="mt-1 text-xs font-medium text-warning">{{ t('payment.perpayScanExactHint') }}</div>
+            </div>
+            <div v-else class="mb-3 text-[13px] text-muted-foreground">{{ paymentGuideTitle }}</div>
             <div class="aspect-square w-full max-w-[240px] overflow-hidden rounded-md bg-white p-2"><img :src="qrImageUrl" alt="QR Code" class="h-full w-full object-contain" /></div>
             <div v-if="qrUsingPayLinkFallback" class="mt-2.5 text-xs text-muted-foreground">{{ t('payment.qrFallbackHint') }}</div>
             <div v-if="hasCryptoPaymentDetails" class="mt-4 grid w-full gap-2 rounded-md border p-3 text-left">
@@ -277,7 +284,7 @@ const {
   paymentResultTitle, paymentGuideTitle, paymentGuideTip, showPayLink, showTelegramPayHint, payLinkOpenedTip,
   cryptoWalletAddress, cryptoPaymentDetails, hasCryptoPaymentDetails, qrUsingPayLinkFallback, showQRCode, qrImageUrl,
   orderExpired, orderCanceled, paymentAlert, countdownExpired, countdownText, showCountdown, showResultView, pollingActive, orderItems,
-  customerFeeApplied, customerFeeAmountDisplay, payableAmountDisplay, walletBalanceDisplay,
+  customerFeeApplied, customerFeeAmountDisplay, payableAmountDisplay, perpayExactAmount, walletBalanceDisplay,
   expectedWalletPaidDisplay, expectedOnlinePayDisplay, expectedOnlinePayCents, requiresOnlineChannel,
   paymentWalletPaidDisplay, paymentOnlinePayDisplay, isChannelDisabledForAmount, channelAmountLimitHint, canSubmitPayment,
   formatDate, statusLabel, formatMoney, hasDiscountAmount, formatDiscountMoney, getLocalizedText, orderItemSkuText, fulfillmentTypeLabelText,

@@ -89,7 +89,14 @@
             <div class="lg:col-span-2 space-y-4">
               <div v-if="showQRCode"
                 class="bg-secondary border rounded-2xl p-4 sm:p-6 flex flex-col items-center justify-center text-center">
-                <div class="text-sm text-muted-foreground mb-4">{{ paymentGuideTitle }}</div>
+                <div v-if="perpayExactAmount" class="mb-4">
+                  <div class="text-base font-semibold text-foreground">
+                    {{ t('payment.perpayScanTitle') }}
+                    <span class="ml-1 text-2xl font-extrabold text-destructive tabular-nums">¥{{ perpayExactAmount }}</span>
+                  </div>
+                  <div class="mt-1 text-xs font-medium text-warning">{{ t('payment.perpayScanExactHint') }}</div>
+                </div>
+                <div v-else class="text-sm text-muted-foreground mb-4">{{ paymentGuideTitle }}</div>
                 <div class="w-full max-w-[280px] sm:max-w-[240px] aspect-square rounded-xl overflow-hidden bg-white p-2">
                   <img :src="qrImageUrl" alt="QR Code" class="w-full h-full object-contain" />
                 </div>
@@ -394,7 +401,11 @@
                 <img :src="qrImageUrl" alt="QR Code" class="w-48 h-48 object-contain" />
               </div>
               <div class="text-sm text-muted-foreground space-y-3">
-                <div class="text-foreground font-semibold">{{ paymentGuideTitle }}</div>
+                <div v-if="perpayExactAmount" class="text-foreground font-semibold">
+                  {{ t('payment.perpayScanTitle') }}
+                  <span class="ml-1 text-xl font-extrabold text-destructive tabular-nums">¥{{ perpayExactAmount }}</span>
+                </div>
+                <div v-else class="text-foreground font-semibold">{{ paymentGuideTitle }}</div>
                 <div>{{ paymentGuideTip }}</div>
                 <div v-if="qrUsingPayLinkFallback" class="text-xs text-muted-foreground">
                   {{ t('payment.qrFallbackHint') }}
@@ -519,7 +530,7 @@ const {
   paymentResultTitle, paymentGuideTitle, paymentGuideTip, showPayLink, showTelegramPayHint, payLinkOpenedTip,
   cryptoWalletAddress, cryptoPaymentDetails, hasCryptoPaymentDetails, qrUsingPayLinkFallback, showQRCode, qrImageUrl,
   orderExpired, orderCanceled, paymentAlert, countdownExpired, countdownText, showCountdown, showResultView, pollingActive, orderItems,
-  customerFeeApplied, customerFeeAmountDisplay, payableAmountDisplay, walletBalanceDisplay,
+  customerFeeApplied, customerFeeAmountDisplay, payableAmountDisplay, perpayExactAmount, walletBalanceDisplay,
   expectedWalletPaidDisplay, expectedOnlinePayDisplay, expectedOnlinePayCents, requiresOnlineChannel,
   paymentWalletPaidDisplay, paymentOnlinePayDisplay, isChannelDisabledForAmount, channelAmountLimitHint, canSubmitPayment,
   formatDate, statusLabel, formatMoney, hasDiscountAmount, formatDiscountMoney, getLocalizedText, orderItemSkuText, fulfillmentTypeLabelText,
