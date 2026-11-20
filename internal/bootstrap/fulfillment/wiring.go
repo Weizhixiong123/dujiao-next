@@ -18,10 +18,11 @@ type fulfillmentManualCreatorAdapter struct {
 
 func (a fulfillmentManualCreatorAdapter) CreateManual(input fulfillmenttransport.CreateManualInput) (*fulfillmentdomain.Fulfillment, error) {
 	res, err := a.svc.CreateManual(fulfillmentapp.CreateManualInput{
-		OrderID:      input.OrderID,
-		AdminID:      input.AdminID,
-		Payload:      input.Payload,
-		DeliveryData: input.DeliveryData,
+		UpstreamNotChargedConfirmed: input.UpstreamNotChargedConfirmed,
+		OrderID:                     input.OrderID,
+		AdminID:                     input.AdminID,
+		Payload:                     input.Payload,
+		DeliveryData:                input.DeliveryData,
 	})
 	return res, mapFulfillmentTransportError(err)
 }
@@ -43,6 +44,7 @@ func mapFulfillmentTransportError(err error) error {
 		source error
 		target error
 	}{
+		{fulfillmentapp.ErrProcurementFallbackUnavailable, fulfillmenttransport.ErrProcurementFallbackUnavailable},
 		{fulfillmentapp.ErrFulfillmentExists, fulfillmenttransport.ErrFulfillmentExists},
 		{fulfillmentapp.ErrFulfillmentInvalid, fulfillmenttransport.ErrFulfillmentInvalid},
 		{fulfillmentapp.ErrOrderStatusInvalid, fulfillmenttransport.ErrOrderStatusInvalid},

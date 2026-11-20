@@ -29,6 +29,25 @@ func (s *Service) SubmitToUpstream(procurementOrderID uint) error {
 		return procurementcontract.ErrStatusInvalid
 	}
 
+	// Serialize workers for this purchase. A terminal rejection can be taken
+	// over only after the outbound attempt has finished.
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	leaseUntil := now.Add(2 * time.Minute)
+	claimed, err := s.procRepo.ClaimSubmission(procOrder.ID, procOrder.Status, now, leaseUntil)
+	if err != nil {
+		return fmt.Errorf("claim procurement submission: %w", err)
+	}
+	if !claimed {
+		return nil
+	}
+	defer func() {
+		if err := s.procRepo.ReleaseSubmission(procOrder.ID, leaseUntil); err != nil {
+			logger.Warnw("procurement_release_submission_failed", "procurement_order_id", procOrder.ID, "error", err)
+		}
+	}()
+	ctx, cancel := context.WithDeadline(context.Background(), now.Add(30*time.Second))
+	defer cancel()
+
 	// 获取连接和适配器
 	connection, err := s.connections.Open(procOrder.ConnectionID)
 	if err != nil {
@@ -86,9 +105,6 @@ func (s *Service) SubmitToUpstream(procurementOrderID uint) error {
 		req.ManualFormData = item.ManualFormSubmissionJSON
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
 	if preparer, ok := connection.(procurementcontract.OrderPreparer); ok {
 		req.PreparedOrder = procOrder.UpstreamRequest
 		if req.PreparedOrder == "" {
@@ -122,7 +138,7 @@ func (s *Service) SubmitToUpstream(procurementOrderID uint) error {
 	}
 
 	// 成功：更新状态，重置 retry_count 用于轮询阶段
-	now := time.Now()
+	now = time.Now()
 	upstreamFields := map[string]interface{}{
 		"upstream_order_id": resp.OrderID,
 		"upstream_order_no": resp.OrderNo,

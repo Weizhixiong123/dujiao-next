@@ -19,7 +19,7 @@ type Handlers struct {
 func New(c *container.Container) Handlers {
 	return Handlers{
 		Admin: ordertransport.NewAdminHandler(
-			orderAdminQueryAdapter{orders: c.OrderService},
+			orderAdminQueryAdapter{orders: c.OrderService, procurements: c.ProcurementOrderRepo},
 			orderAdminUserAdapter{users: c.UserStore},
 			orderAdminCouponAdapter{coupons: c.CouponRepo},
 			orderAdminPromotionAdapter{promotions: c.PromotionRepo},

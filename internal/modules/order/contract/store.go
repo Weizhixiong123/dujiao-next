@@ -80,6 +80,7 @@ type Transaction interface {
 	Coupons() couponcontract.Repository
 	CouponUsages() couponcontract.UsageRepository
 	Fulfillments() fulfillmentcontract.Store
+	StopProcurementForManualFulfillment(orderID uint, now time.Time) (bool, error)
 	Wallets() walletcontract.Transaction
 	Affiliates() affiliatecontract.Store
 	ResellerOrders() ResellerOrderStore

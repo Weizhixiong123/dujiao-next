@@ -17,6 +17,7 @@ import (
 	fulfillmentcontract "github.com/dujiao-next/internal/modules/fulfillment/contract"
 	fulfillmentgormstore "github.com/dujiao-next/internal/modules/fulfillment/infrastructure/gormstore"
 	ordercontract "github.com/dujiao-next/internal/modules/order/contract"
+	procurementgormstore "github.com/dujiao-next/internal/modules/procurement/infrastructure/gormstore"
 	resellercontract "github.com/dujiao-next/internal/modules/reseller/contract"
 	resellergormstore "github.com/dujiao-next/internal/modules/reseller/infrastructure/gormstore"
 	walletcontract "github.com/dujiao-next/internal/modules/wallet/contract"
@@ -80,6 +81,10 @@ func (tx transaction) CouponUsages() couponcontract.UsageRepository {
 
 func (tx transaction) Fulfillments() fulfillmentcontract.Store {
 	return fulfillmentgormstore.New(tx.db)
+}
+
+func (tx transaction) StopProcurementForManualFulfillment(orderID uint, now time.Time) (bool, error) {
+	return procurementgormstore.New(tx.db).StopForManualFulfillment(orderID, now)
 }
 
 func (tx transaction) Wallets() walletcontract.Transaction {

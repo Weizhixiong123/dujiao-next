@@ -4,6 +4,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/dujiao-next/internal/constants"
+
 	orderdomain "github.com/dujiao-next/internal/modules/order/domain"
 
 	procurementcontract "github.com/dujiao-next/internal/modules/procurement/contract"
@@ -60,6 +62,41 @@ func (s *Store) first(query string, argument any) (*procurementdomain.Order, err
 
 func (s *Store) Create(order *procurementdomain.Order) error {
 	return s.db.Omit(clause.Associations).Create(order).Error
+}
+
+func (s *Store) ClaimSubmission(id uint, status string, now, until time.Time) (bool, error) {
+	result := s.active().Model(&procurementdomain.Order{}).
+		Where("id = ? AND status = ? AND (submit_lease_until IS NULL OR submit_lease_until <= ?)", id, status, now).
+		UpdateColumn("submit_lease_until", until)
+	return result.RowsAffected == 1, result.Error
+}
+
+func (s *Store) ReleaseSubmission(id uint, until time.Time) error {
+	return s.active().Model(&procurementdomain.Order{}).
+		Where("id = ? AND submit_lease_until = ?", id, until).
+		UpdateColumn("submit_lease_until", nil).Error
+}
+
+func (s *Store) manualFallbackCandidates(orderID uint, now time.Time) *gorm.DB {
+	return s.active().Model(&procurementdomain.Order{}).
+		Where("local_order_id = ? AND status = ?", orderID, constants.ProcurementStatusRejected).
+		Where("COALESCE(upstream_order_id, 0) = 0 AND COALESCE(upstream_order_no, '') = ''").
+		Where("submit_lease_until IS NULL OR submit_lease_until <= ?", now).
+		Where("(SELECT COUNT(*) FROM procurement_orders WHERE local_order_id = ? AND deleted_at IS NULL) = 1", orderID)
+}
+
+func (s *Store) CanManuallyFulfill(orderID uint, now time.Time) (bool, error) {
+	var count int64
+	err := s.manualFallbackCandidates(orderID, now).Count(&count).Error
+	return count == 1, err
+}
+
+func (s *Store) StopForManualFulfillment(orderID uint, now time.Time) (bool, error) {
+	result := s.manualFallbackCandidates(orderID, now).Updates(map[string]interface{}{
+		"status": constants.ProcurementStatusCanceled, "next_retry_at": nil,
+		"submit_lease_until": nil, "updated_at": now,
+	})
+	return result.RowsAffected == 1, result.Error
 }
 
 func (s *Store) FreezeUpstreamRequest(id uint, status, request string) (bool, error) {

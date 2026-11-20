@@ -1006,6 +1006,8 @@ const messages = {
         detailPayments: '支付记录',
         fulfillmentCreate: '交付录入',
         fulfillmentModalTitle: '交付录入',
+        manualFallback: '人工补发',
+        manualFallbackConfirmation: '我已确认原采购在上游未成单、未扣款。保存后将停止原采购重试，并向买家显示交付内容。',
         fulfillmentType: '交付类型',
         fulfillmentTypes: {
           manual: '人工交付',
@@ -5624,6 +5626,8 @@ const messages = {
         detailPayments: '支付紀錄',
         fulfillmentCreate: '交付錄入',
         fulfillmentModalTitle: '交付錄入',
+        manualFallback: '人工補發',
+        manualFallbackConfirmation: '我已確認原採購在上游未成單、未扣款。儲存後將停止原採購重試，並向買家顯示交付內容。',
         fulfillmentType: '交付類型',
         fulfillmentTypes: {
           manual: '人工交付',
@@ -10242,6 +10246,8 @@ const messages = {
         detailPayments: 'Payments',
         fulfillmentCreate: 'Create Fulfillment',
         fulfillmentModalTitle: 'Fulfillment',
+        manualFallback: 'Manual delivery',
+        manualFallbackConfirmation: 'I confirmed the original purchase was neither created nor charged by the supplier. Saving stops retries and makes the delivery content visible to the customer.',
         fulfillmentType: 'Type',
         fulfillmentTypes: {
           manual: 'Manual',

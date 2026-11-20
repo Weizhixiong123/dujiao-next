@@ -16,6 +16,7 @@ import (
 
 	userdomain "github.com/dujiao-next/internal/modules/identity/user/domain"
 
+	"github.com/dujiao-next/internal/constants"
 	"github.com/dujiao-next/internal/platform/http/ginutil"
 	"github.com/dujiao-next/internal/platform/http/response"
 
@@ -49,6 +50,7 @@ type OrderListFilter struct {
 type OrderQuery interface {
 	ListOrdersForAdmin(filter OrderListFilter) ([]orderdomain.Order, int64, error)
 	GetOrderForAdmin(orderID uint) (*orderdomain.Order, error)
+	CanManuallyFulfillProcurement(orderID uint, now time.Time) (bool, error)
 	UpdateOrderStatus(orderID uint, status string) (*orderdomain.Order, error)
 }
 
@@ -135,11 +137,12 @@ type AdminOrderPaymentItem struct {
 // AdminOrderDetail 管理端订单详情返回
 type AdminOrderDetail struct {
 	orderdomain.Order
-	UserEmail       string                  `json:"user_email,omitempty"`
-	UserDisplayName string                  `json:"user_display_name,omitempty"`
-	CouponCode      string                  `json:"coupon_code,omitempty"`
-	PromotionName   string                  `json:"promotion_name,omitempty"`
-	Payments        []AdminOrderPaymentItem `json:"payments,omitempty"`
+	UserEmail              string                  `json:"user_email,omitempty"`
+	UserDisplayName        string                  `json:"user_display_name,omitempty"`
+	CouponCode             string                  `json:"coupon_code,omitempty"`
+	PromotionName          string                  `json:"promotion_name,omitempty"`
+	ManualFallbackOrderIDs []uint                  `json:"manual_fallback_order_ids,omitempty"`
+	Payments               []AdminOrderPaymentItem `json:"payments,omitempty"`
 	// RefundReversesCost 为 true 时，订单详情利润在退款时按比例冲回成本。
 	RefundReversesCost bool `json:"refund_reverses_cost"`
 }
@@ -360,14 +363,41 @@ func (h *AdminHandler) AdminGetOrder(c *gin.Context) {
 		})
 	}
 
+	candidates := order.Children
+	if len(candidates) == 0 {
+		candidates = []orderdomain.Order{*order}
+	}
+	var fallbackIDs []uint
+	now := time.Now().UTC()
+	for _, candidate := range candidates {
+		if candidate.Fulfillment != nil || (candidate.Status != constants.OrderStatusPaid && candidate.Status != constants.OrderStatusFulfilling) {
+			continue
+		}
+		for _, item := range candidate.Items {
+			if item.FulfillmentType != constants.FulfillmentTypeUpstream {
+				continue
+			}
+			eligible, err := h.orders.CanManuallyFulfillProcurement(candidate.ID, now)
+			if err != nil {
+				ginutil.RespondError(c, response.CodeInternal, "error.order_fetch_failed", err)
+				return
+			}
+			if eligible {
+				fallbackIDs = append(fallbackIDs, candidate.ID)
+			}
+			break
+		}
+	}
+
 	order.TruncateFulfillmentPayload()
 	response.Success(c, AdminOrderDetail{
-		Order:           *order,
-		UserEmail:       email,
-		UserDisplayName: displayName,
-		CouponCode:      couponCode,
-		PromotionName:   promotionName,
-		Payments:        paymentItems,
+		ManualFallbackOrderIDs: fallbackIDs,
+		Order:                  *order,
+		UserEmail:              email,
+		UserDisplayName:        displayName,
+		CouponCode:             couponCode,
+		PromotionName:          promotionName,
+		Payments:               paymentItems,
 
 		RefundReversesCost: h.accounting.RefundReversesCost(),
 	})

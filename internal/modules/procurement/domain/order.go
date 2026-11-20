@@ -27,6 +27,7 @@ type Order struct {
 	Currency                 string       `gorm:"type:varchar(10);not null" json:"currency"`
 	ErrorMessage             string       `gorm:"type:text" json:"error_message,omitempty"`
 	RetryCount               int          `gorm:"not null;default:0" json:"retry_count"`
+	SubmitLeaseUntil         *time.Time   `json:"-"`
 	NextRetryAt              *time.Time   `gorm:"index" json:"next_retry_at,omitempty"`
 	UpstreamPayload          string       `gorm:"type:text" json:"upstream_payload,omitempty"`
 	UpstreamPayloadLineCount int          `gorm:"-" json:"upstream_payload_line_count"`

@@ -187,6 +187,7 @@ export interface AdminOrder {
   user_display_name?: string
   user_email?: string
   // 订单详情接口返回：退款时是否按比例冲回成本（仪表盘统计口径）
+  manual_fallback_order_ids?: number[]
   refund_reverses_cost?: boolean
 }
 

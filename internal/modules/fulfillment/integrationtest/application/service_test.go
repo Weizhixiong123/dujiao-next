@@ -13,6 +13,8 @@ import (
 	ordercontract "github.com/dujiao-next/internal/modules/order/contract"
 	orderdomain "github.com/dujiao-next/internal/modules/order/domain"
 	ordergormstore "github.com/dujiao-next/internal/modules/order/infrastructure/gormstore"
+	procurementdomain "github.com/dujiao-next/internal/modules/procurement/domain"
+	procurementgormstore "github.com/dujiao-next/internal/modules/procurement/infrastructure/gormstore"
 
 	"github.com/dujiao-next/internal/constants"
 	cardsecretdomain "github.com/dujiao-next/internal/modules/cardsecret/domain"
@@ -233,6 +235,90 @@ func TestFulfillmentRejectedWhenRefundCommitsBeforeDeliveryTransaction(t *testin
 			}
 			if secretAfter.Status != cardsecretdomain.StatusAvailable {
 				t.Fatalf("secret status want available got %s", secretAfter.Status)
+			}
+		})
+	}
+}
+
+func TestManualFallbackStopsRejectedProcurement(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		status          string
+		upstreamOrderID uint
+		leaseActive     bool
+		confirmed       bool
+		success         bool
+	}{
+		{name: "confirmed rejection", status: constants.ProcurementStatusRejected, confirmed: true, success: true},
+		{name: "missing confirmation", status: constants.ProcurementStatusRejected},
+		{name: "retry scheduled", status: constants.ProcurementStatusFailed, confirmed: true},
+		{name: "supplier order exists", status: constants.ProcurementStatusRejected, confirmed: true, upstreamOrderID: 1},
+		{name: "worker still active", status: constants.ProcurementStatusRejected, confirmed: true, leaseActive: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db := setupFulfillmentServiceTestDB(t)
+			sqlDB, err := db.DB()
+			if err != nil {
+				t.Fatal(err)
+			}
+			sqlDB.SetMaxOpenConns(1)
+			t.Cleanup(func() { _ = sqlDB.Close() })
+			if err := db.AutoMigrate(&procurementdomain.Order{}); err != nil {
+				t.Fatal(err)
+			}
+			parent := orderdomain.Order{OrderNo: "MANUAL-FALLBACK", Status: constants.OrderStatusPaid, Currency: "CNY"}
+			if err := db.Create(&parent).Error; err != nil {
+				t.Fatal(err)
+			}
+			order := orderdomain.Order{OrderNo: "MANUAL-FALLBACK-01", ParentID: &parent.ID, Status: constants.OrderStatusPaid, Currency: "CNY"}
+			if err := db.Create(&order).Error; err != nil {
+				t.Fatal(err)
+			}
+			item := orderdomain.OrderItem{OrderID: order.ID, ProductID: 1, SKUID: 1, Quantity: 1, TitleJSON: jsonmap.JSON{"en-US": "Test product"}, FulfillmentType: constants.FulfillmentTypeUpstream}
+			if err := db.Create(&item).Error; err != nil {
+				t.Fatal(err)
+			}
+			purchase := procurementdomain.Order{
+				ConnectionID: 1, LocalOrderID: order.ID, LocalOrderNo: order.OrderNo,
+				Status: tc.status, UpstreamOrderID: tc.upstreamOrderID, Currency: "CNY",
+			}
+			if tc.leaseActive {
+				until := time.Now().UTC().Add(time.Minute)
+				purchase.SubmitLeaseUntil = &until
+			}
+			procurements := procurementgormstore.New(db)
+			if err := procurements.Create(&purchase); err != nil {
+				t.Fatal(err)
+			}
+			svc := New(Options{
+				OrderStore:       ordergormstore.New(db, "test-guest-credential-secret-with-32-bytes"),
+				FulfillmentStore: fulfillmentgormstore.New(db),
+			})
+			result, err := svc.CreateManual(CreateManualInput{
+				OrderID: order.ID, AdminID: 1, Payload: "Delivered separately",
+				UpstreamNotChargedConfirmed: tc.confirmed,
+			})
+			wantPurchase, wantOrder := tc.status, constants.OrderStatusPaid
+			if tc.success {
+				if err != nil || result == nil || result.Status != constants.FulfillmentStatusDelivered {
+					t.Fatalf("expected successful manual delivery, got %v, %v", result, err)
+				}
+				wantPurchase, wantOrder = constants.ProcurementStatusCanceled, constants.OrderStatusDelivered
+				updated, err := procurements.UpdateStatus(purchase.ID, constants.ProcurementStatusRejected, constants.ProcurementStatusPending, nil)
+				if err != nil || updated {
+					t.Fatalf("canceled procurement must reject retry, updated=%v, error=%v", updated, err)
+				}
+			} else if !errors.Is(err, ErrProcurementFallbackUnavailable) || result != nil {
+				t.Fatalf("expected the fallback to be blocked, got %v, %v", result, err)
+			}
+			if err := db.First(&purchase, purchase.ID).Error; err != nil || purchase.Status != wantPurchase {
+				t.Fatalf("want procurement %s, got %s, %v", wantPurchase, purchase.Status, err)
+			}
+			if err := db.First(&order, order.ID).Error; err != nil || order.Status != wantOrder {
+				t.Fatalf("want order %s, got %s, %v", wantOrder, order.Status, err)
+			}
+			if err := db.First(&parent, parent.ID).Error; err != nil || parent.Status != wantOrder {
+				t.Fatalf("want parent order %s, got %s, %v", wantOrder, parent.Status, err)
 			}
 		})
 	}

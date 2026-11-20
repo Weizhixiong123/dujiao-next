@@ -15,18 +15,20 @@ import (
 )
 
 var (
-	ErrFulfillmentExists  = errors.New("fulfillment exists")
-	ErrFulfillmentInvalid = errors.New("fulfillment invalid")
-	ErrOrderStatusInvalid = errors.New("order status invalid")
-	ErrOrderNotFound      = errors.New("order not found")
+	ErrProcurementFallbackUnavailable = errors.New("procurement fallback unavailable")
+	ErrFulfillmentExists              = errors.New("fulfillment exists")
+	ErrFulfillmentInvalid             = errors.New("fulfillment invalid")
+	ErrOrderStatusInvalid             = errors.New("order status invalid")
+	ErrOrderNotFound                  = errors.New("order not found")
 )
 
 // CreateManualInput 创建人工交付输入。
 type CreateManualInput struct {
-	OrderID      uint
-	AdminID      uint
-	Payload      string
-	DeliveryData jsonmap.JSON
+	UpstreamNotChargedConfirmed bool
+	OrderID                     uint
+	AdminID                     uint
+	Payload                     string
+	DeliveryData                jsonmap.JSON
 }
 
 // ManualCreator 管理端录入交付端口。
@@ -57,9 +59,10 @@ func NewAdminHandler(creator ManualCreator, orders AdminOrderReader) *AdminHandl
 
 // AdminCreateFulfillmentRequest 管理端录入交付请求。
 type AdminCreateFulfillmentRequest struct {
-	OrderID      uint         `json:"order_id" binding:"required"`
-	Payload      string       `json:"payload"`
-	DeliveryData jsonmap.JSON `json:"delivery_data"`
+	UpstreamNotChargedConfirmed bool         `json:"upstream_not_charged_confirmed"`
+	OrderID                     uint         `json:"order_id" binding:"required"`
+	Payload                     string       `json:"payload"`
+	DeliveryData                jsonmap.JSON `json:"delivery_data"`
 }
 
 // AdminCreateFulfillment 管理端录入交付内容。
@@ -76,13 +79,16 @@ func (h *AdminHandler) AdminCreateFulfillment(c *gin.Context) {
 	}
 
 	fulfillment, err := h.creator.CreateManual(CreateManualInput{
-		OrderID:      req.OrderID,
-		AdminID:      adminID,
-		Payload:      req.Payload,
-		DeliveryData: req.DeliveryData,
+		UpstreamNotChargedConfirmed: req.UpstreamNotChargedConfirmed,
+		OrderID:                     req.OrderID,
+		AdminID:                     adminID,
+		Payload:                     req.Payload,
+		DeliveryData:                req.DeliveryData,
 	})
 	if err != nil {
 		switch {
+		case errors.Is(err, ErrProcurementFallbackUnavailable):
+			ginutil.RespondError(c, response.CodeBadRequest, "error.procurement_fallback_unavailable", nil)
 		case errors.Is(err, ErrFulfillmentExists):
 			ginutil.RespondError(c, response.CodeBadRequest, "error.fulfillment_exists", nil)
 		case errors.Is(err, ErrFulfillmentInvalid):

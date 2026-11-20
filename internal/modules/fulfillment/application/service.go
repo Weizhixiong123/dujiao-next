@@ -75,11 +75,12 @@ func New(
 
 // CreateManualInput 创建人工交付输入
 type CreateManualInput struct {
-	OrderID      uint
-	AdminID      uint
-	Payload      string
-	DeliveryData jsonmap.JSON
-	DeliveredAt  *time.Time
+	OrderID                     uint
+	AdminID                     uint
+	Payload                     string
+	DeliveryData                jsonmap.JSON
+	DeliveredAt                 *time.Time
+	UpstreamNotChargedConfirmed bool
 }
 
 // CreateManual 创建人工交付
@@ -133,6 +134,23 @@ func (s *Service) CreateManual(input CreateManualInput) (*fulfillmentdomain.Fulf
 			return ErrFulfillmentExists
 		}
 
+		for _, item := range order.Items {
+			if item.FulfillmentType != constants.FulfillmentTypeUpstream {
+				continue
+			}
+			if !input.UpstreamNotChargedConfirmed {
+				return ErrProcurementFallbackUnavailable
+			}
+			stopped, err := tx.StopProcurementForManualFulfillment(order.ID, time.Now().UTC())
+			if err != nil {
+				return err
+			}
+			if !stopped {
+				return ErrProcurementFallbackUnavailable
+			}
+			break
+		}
+
 		fulfillment := &fulfillmentdomain.Fulfillment{
 			OrderID:       input.OrderID,
 			Type:          ftype,
@@ -158,6 +176,9 @@ func (s *Service) CreateManual(input CreateManualInput) (*fulfillmentdomain.Fulf
 		return nil
 	})
 	if err != nil {
+		if errors.Is(err, ErrProcurementFallbackUnavailable) {
+			return nil, err
+		}
 		if errors.Is(err, ErrFulfillmentExists) {
 			return nil, ErrFulfillmentExists
 		}
@@ -169,47 +190,24 @@ func (s *Service) CreateManual(input CreateManualInput) (*fulfillmentdomain.Fulf
 		}
 		return nil, ErrFulfillmentCreateFailed
 	}
-	if s.orderQueue != nil {
-		if order.ParentID != nil {
-			status, syncErr := orderapp.SyncParentStatus(s.orderStore, *order.ParentID, now)
-			if syncErr != nil {
-				logger.Warnw("fulfillment_sync_parent_status_failed",
-					"order_id", order.ID,
-					"parent_order_id", *order.ParentID,
-					"target_status", constants.OrderStatusDelivered,
-					"error", syncErr,
-				)
-			} else {
-				if status == "" {
-					status = constants.OrderStatusDelivered
-				}
-				if status != constants.OrderStatusCanceled {
-					if _, err := orderapp.EnqueueStatusEmailTaskIfEligible(s.orderStore, s.orderQueue, s.settingService, s.defaultEmailConfig, *order.ParentID, status); err != nil {
-						logger.Warnw("fulfillment_enqueue_status_email_failed",
-							"order_id", order.ID,
-							"target_order_id", *order.ParentID,
-							"status", status,
-							"error", err,
-						)
-					}
-				}
-			}
-		} else {
-			if _, err := orderapp.EnqueueStatusEmailTaskIfEligible(s.orderStore, s.orderQueue, s.settingService, s.defaultEmailConfig, input.OrderID, constants.OrderStatusDelivered); err != nil {
-				logger.Warnw("fulfillment_enqueue_status_email_failed",
-					"order_id", order.ID,
-					"target_order_id", input.OrderID,
-					"status", constants.OrderStatusDelivered,
-					"error", err,
-				)
-			}
+	notifyOrderID := input.OrderID
+	notifyStatus := constants.OrderStatusDelivered
+	if order.ParentID != nil {
+		notifyOrderID = *order.ParentID
+		status, syncErr := orderapp.SyncParentStatus(s.orderStore, notifyOrderID, now)
+		if syncErr != nil {
+			logger.Warnw("fulfillment_sync_parent_status_failed", "order_id", order.ID, "parent_order_id", notifyOrderID, "error", syncErr)
+			notifyStatus = ""
+		} else if status != "" {
+			notifyStatus = status
+		}
+	}
+	if s.orderQueue != nil && notifyStatus != "" && notifyStatus != constants.OrderStatusCanceled {
+		if _, err := orderapp.EnqueueStatusEmailTaskIfEligible(s.orderStore, s.orderQueue, s.settingService, s.defaultEmailConfig, notifyOrderID, notifyStatus); err != nil {
+			logger.Warnw("fulfillment_enqueue_status_email_failed", "order_id", order.ID, "target_order_id", notifyOrderID, "status", notifyStatus, "error", err)
 		}
 	}
 	// Telegram 通知：交付完成后推送给用户
-	notifyOrderID := input.OrderID
-	if order.ParentID != nil {
-		notifyOrderID = *order.ParentID
-	}
 	go s.NotifyBotOrderFulfilled(order.UserID, notifyOrderID)
 	// B 侧：人工交付完成后触发下游回调
 	if s.downstreamCallbackSvc != nil {

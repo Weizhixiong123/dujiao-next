@@ -3,6 +3,7 @@ package orderwiring
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	paymentapp "github.com/dujiao-next/internal/modules/payment/application"
 	paymentcontract "github.com/dujiao-next/internal/modules/payment/contract"
@@ -40,7 +41,14 @@ import (
 )
 
 type orderAdminQueryAdapter struct {
-	orders *orderapp.OrderService
+	orders       *orderapp.OrderService
+	procurements interface {
+		CanManuallyFulfill(orderID uint, now time.Time) (bool, error)
+	}
+}
+
+func (a orderAdminQueryAdapter) CanManuallyFulfillProcurement(orderID uint, now time.Time) (bool, error) {
+	return a.procurements.CanManuallyFulfill(orderID, now)
 }
 
 func (a orderAdminQueryAdapter) ListOrdersForAdmin(filter ordertransport.OrderListFilter) ([]orderdomain.Order, int64, error) {

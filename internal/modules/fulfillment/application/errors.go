@@ -8,13 +8,14 @@ import (
 )
 
 var (
-	ErrFulfillmentInvalid      = productcontract.ErrFulfillmentInvalid
-	ErrFulfillmentExists       = errors.New("fulfillment exists")
-	ErrFulfillmentCreateFailed = errors.New("fulfillment create failed")
-	ErrFulfillmentNotAuto      = errors.New("fulfillment not auto")
-	ErrOrderNotFound           = orderapp.ErrOrderNotFound
-	ErrOrderFetchFailed        = orderapp.ErrOrderFetchFailed
-	ErrOrderStatusInvalid      = orderapp.ErrOrderStatusInvalid
-	ErrOrderUpdateFailed       = orderapp.ErrOrderUpdateFailed
-	ErrCardSecretInsufficient  = orderapp.ErrCardSecretInsufficient
+	ErrFulfillmentInvalid             = productcontract.ErrFulfillmentInvalid
+	ErrProcurementFallbackUnavailable = errors.New("procurement fallback unavailable")
+	ErrFulfillmentExists              = errors.New("fulfillment exists")
+	ErrFulfillmentCreateFailed        = errors.New("fulfillment create failed")
+	ErrFulfillmentNotAuto             = errors.New("fulfillment not auto")
+	ErrOrderNotFound                  = orderapp.ErrOrderNotFound
+	ErrOrderFetchFailed               = orderapp.ErrOrderFetchFailed
+	ErrOrderStatusInvalid             = orderapp.ErrOrderStatusInvalid
+	ErrOrderUpdateFailed              = orderapp.ErrOrderUpdateFailed
+	ErrCardSecretInsufficient         = orderapp.ErrCardSecretInsufficient
 )

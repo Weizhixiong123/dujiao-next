@@ -710,6 +710,10 @@ watch(
           {{ detailError }}
         </div>
         <div v-else-if="selectedOrder" class="space-y-6">
+          <Button v-if="selectedOrder.manual_fallback_order_ids?.includes(selectedOrder.id)" size="sm" variant="secondary"
+            @click="handleOpenFulfillment(selectedOrder)">
+            {{ t('admin.orders.manualFallback') }}
+          </Button>
           <div class="grid grid-cols-1 gap-4 text-sm md:grid-cols-2 [&>*]:min-w-0">
             <Card class="min-w-0 rounded-lg border-border bg-background shadow-none">
               <CardContent class="p-3">
@@ -964,7 +968,11 @@ watch(
                     <span class="inline-flex rounded-full border px-2.5 py-1 text-xs" :class="statusClass(child.status)">
                       {{ statusLabel(child.status) }}
                     </span>
-                    <Button v-if="canCreateChildFulfillment(child)" size="sm" variant="secondary" class="w-full sm:w-auto" @click="handleOpenFulfillment(child, selectedOrder.id)">
+                    <Button v-if="selectedOrder.manual_fallback_order_ids?.includes(child.id)" size="sm" variant="secondary"
+                      class="w-full sm:w-auto" @click="handleOpenFulfillment(child, selectedOrder.id)">
+                      {{ t('admin.orders.manualFallback') }}
+                    </Button>
+                    <Button v-else-if="canCreateChildFulfillment(child)" size="sm" variant="secondary" class="w-full sm:w-auto" @click="handleOpenFulfillment(child, selectedOrder.id)">
                       {{ t('admin.orders.fulfillmentCreate') }}
                     </Button>
                   </div>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
 import type { AdminOrder } from '@/api/types'
@@ -30,6 +30,8 @@ const selectedOrder = ref<AdminOrder | null>(null)
 const fulfillmentSubmitting = ref(false)
 const fulfillmentError = ref('')
 const fulfillmentSuccess = ref('')
+const upstreamFallback = computed(() => !!selectedOrder.value?.items?.some(item => item.fulfillment_type === 'upstream'))
+const upstreamConfirmed = ref(false)
 const fulfillmentForm = reactive({
   note: '',
   entries: [] as Array<{ key: string; value: string }>,
@@ -70,6 +72,7 @@ const hasFulfillmentSubmitData = () => {
 }
 
 const resetFulfillmentForm = () => {
+  upstreamConfirmed.value = false
   fulfillmentForm.note = ''
   fulfillmentForm.entries = [createEmptyDeliveryEntry()]
   fulfillmentError.value = ''
@@ -91,7 +94,7 @@ const fetchOrderDetail = async (orderId: number) => {
 }
 
 const submitFulfillment = async () => {
-  if (!selectedOrder.value) return
+  if (!selectedOrder.value || fulfillmentSubmitting.value || (upstreamFallback.value && !upstreamConfirmed.value)) return
   fulfillmentError.value = ''
   fulfillmentSuccess.value = ''
   if (!hasFulfillmentSubmitData()) {
@@ -103,6 +106,7 @@ const submitFulfillment = async () => {
     await adminAPI.createFulfillment({
       order_id: Number(selectedOrder.value.id),
       delivery_data: buildDeliveryDataPayload(),
+      ...(upstreamFallback.value ? { upstream_not_charged_confirmed: upstreamConfirmed.value } : {}),
     })
     fulfillmentSuccess.value = t('admin.orders.fulfillmentSuccess')
     emit('success', props.parentId)
@@ -149,7 +153,7 @@ watch(
   <Dialog :open="modelValue" @update:open="(value) => { if (!value) handleClose() }">
     <DialogScrollContent class="w-[calc(100vw-1rem)] max-w-2xl p-4 sm:p-6">
       <DialogHeader>
-        <DialogTitle>{{ t('admin.orders.fulfillmentModalTitle') }}</DialogTitle>
+        <DialogTitle>{{ t(upstreamFallback ? 'admin.orders.manualFallback' : 'admin.orders.fulfillmentModalTitle') }}</DialogTitle>
       </DialogHeader>
       <div class="space-y-4">
         <div v-if="detailLoading" class="h-24 rounded-lg border border-border bg-muted/40 animate-pulse"></div>
@@ -209,11 +213,16 @@ watch(
               {{ fulfillmentSuccess }}
             </div>
 
+            <label v-if="upstreamFallback" class="flex items-start gap-2 text-sm text-muted-foreground">
+              <input v-model="upstreamConfirmed" type="checkbox" class="mt-1 shrink-0" />
+              <span>{{ t('admin.orders.manualFallbackConfirmation') }}</span>
+            </label>
+
             <div class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <Button class="w-full sm:w-auto" type="button" variant="outline" size="sm" @click="resetFulfillmentForm">
                 {{ t('admin.common.reset') }}
               </Button>
-              <Button class="w-full sm:w-auto" type="submit" size="sm" :disabled="fulfillmentSubmitting">
+              <Button class="w-full sm:w-auto" type="submit" size="sm" :disabled="fulfillmentSubmitting || (upstreamFallback && !upstreamConfirmed)">
                 {{ fulfillmentSubmitting ? t('admin.orders.fulfillmentSubmitting') : t('admin.orders.fulfillmentSubmit') }}
               </Button>
             </div>
